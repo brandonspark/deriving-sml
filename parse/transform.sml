@@ -136,9 +136,10 @@ structure Transform : TRANSFORM =
 
     and transform_datbinds ctx datbinds =
       List.foldl
-        (fn ({tyvars, tycon, conbinds}, (datbinds, ctx)) =>
+        (fn ({tyvars, tycon, conbinds, deriving}, (datbinds, ctx)) =>
           transform_conbinds ctx conbinds
-          |> Pair.map_fst (fn conbinds => {tyvars=tyvars, tycon=tycon, conbinds=conbinds})
+          |> Pair.map_fst (fn conbinds =>
+              {tyvars=tyvars, tycon=tycon, conbinds=conbinds, deriving=deriving})
           |> Pair.map_fst (fn result => result::datbinds))
         ([], ctx)
         datbinds
@@ -654,13 +655,13 @@ structure Transform : TRANSFORM =
         condescs
       |> Pair.map_fst List.rev
 
-    and transform_typdesc ctx {tyvars, tycon, ty} =
+    and transform_typdesc ctx {tyvars, tycon, ty, deriving} =
       case ty of
-        NONE => ({tyvars=tyvars, tycon=tycon, ty=NONE}, ctx)
+        NONE => ({tyvars=tyvars, tycon=tycon, ty=NONE, deriving=deriving}, ctx)
       | SOME ty =>
           transform_ty ctx ty
           |> Pair.map_fst
-              (fn ty => {tyvars=tyvars, tycon=tycon, ty=SOME ty})
+              (fn ty => {tyvars=tyvars, tycon=tycon, ty=SOME ty, deriving=deriving})
 
     and transform_spec ctx spec =
       let open SMLSyntax in
@@ -675,9 +676,10 @@ structure Transform : TRANSFORM =
         | SPeqtype typdesc =>
             transform_typdesc ctx typdesc
             |> expand_node_with_ctx SPeqtype spec
-        | SPdatdec {tyvars, tycon, condescs} =>
+        | SPdatdec {tyvars, tycon, condescs, deriving} =>
             transform_condescs ctx condescs
-            |> Pair.map_fst (fn condescs => {tyvars=tyvars, tycon=tycon, condescs=condescs})
+            |> Pair.map_fst (fn condescs =>
+                {tyvars=tyvars, tycon=tycon, condescs=condescs, deriving=deriving})
             |> expand_node_with_ctx SPdatdec spec
         | SPexception {id, ty} =>
             let

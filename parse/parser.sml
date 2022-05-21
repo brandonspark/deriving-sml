@@ -111,6 +111,30 @@ structure Parser :> PARSER =
         fun optional_false () = NONE
         fun optional_true span = SOME span
 
+        (********************)
+        (* DERIVING SECTION *)
+        (********************)
+
+        type setting = setting
+        type settings = settings
+        val mk_setting = identity
+        val sing_settings = sing
+        val cons_settings = op ::
+
+        type plugin = plugin
+        type plugins = plugins
+        fun bare_plugin name = (name, [])
+        val settings_plugin = identity
+        val sing_plugins = sing
+        val cons_plugins = op ::
+
+        type optional_deriving = plugins option
+        fun none_deriving _ = NONE
+        fun some_deriving (name, plugins) =
+          case Symbol.toValue (Node.getVal name) of
+            "deriving" => SOME plugins
+          | _ => raise Fail "expected \"deriving\""
+
         (***************)
         (* EXP SECTION *)
         (***************)
@@ -579,10 +603,14 @@ structure Parser :> PARSER =
 
         (* Datatype bindings. *)
         type datbind =
-          { tyvars : identifier list, tycon : identifier, conbinds : conbind list}
+          { tyvars : identifier list
+          , tycon : identifier
+          , conbinds : conbind list
+          , deriving : plugins option
+          }
         type datbinds = datbind list
-        fun mk_datbind_bare {tycon, conbinds} =
-          {tyvars=[], tycon=tycon, conbinds=conbinds}
+        fun mk_datbind_bare {tycon, conbinds, deriving} =
+          {tyvars=[], tycon=tycon, conbinds=conbinds, deriving = deriving}
         val mk_datbind = identity
         val sing_datbinds = sing
         val cons_datbinds = op ::
@@ -707,10 +735,17 @@ structure Parser :> PARSER =
         val cons_valdescs = op ::
 
         (* Typdescs. *)
-        type typdesc = { tyvars : identifier list, tycon : identifier, ty : ty option }
+        type typdesc =
+          { tyvars : identifier list
+          , tycon : identifier
+          , ty : ty option
+          , deriving : plugins option
+          }
         type typdescs = typdesc list
-        fun mk_typdesc_abstract {tyvars, tycon} = {tyvars=tyvars, tycon=tycon, ty=NONE}
-        fun mk_typdesc_concrete {tyvars, tycon, ty} = {tyvars=tyvars, tycon=tycon, ty=SOME ty}
+        fun mk_typdesc_abstract {tyvars, tycon, deriving} =
+          {tyvars=tyvars, tycon=tycon, ty=NONE, deriving=deriving}
+        fun mk_typdesc_concrete {tyvars, tycon, ty, deriving} =
+          {tyvars=tyvars, tycon=tycon, ty=SOME ty, deriving=deriving}
         val sing_typdescs = sing
         val cons_typdescs = op ::
 
@@ -734,11 +769,12 @@ structure Parser :> PARSER =
         type datdesc = {
           tyvars : identifier list,
           tycon : identifier,
-          condescs : condescs
+          condescs : condescs,
+          deriving : plugins option
         }
         type datdescs = datdesc list
-        fun mk_datdesc_bare {tycon, condescs} =
-          {tyvars=[], tycon=tycon, condescs=condescs}
+        fun mk_datdesc_bare {tycon, condescs, deriving} =
+          {tyvars=[], tycon=tycon, condescs=condescs, deriving=deriving}
         val mk_datdesc = identity
         val sing_datdescs = sing
         val cons_datdescs = op ::

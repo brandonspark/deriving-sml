@@ -78,6 +78,30 @@ terminal NONFIX of span
 
 terminal EOF of span
 
+/*******************/
+/* Deriving stuff. */
+/*******************/
+
+nonterminal Setting : setting =
+  1:LIDENT EQUAL 2:LIDENT => mk_setting
+
+nonterminal Settings : settings =
+  1:Setting                  => sing_settings
+  1:Setting COMMA 2:Settings => cons_settings
+
+nonterminal Plugin : plugin =
+  1:LIDENT                          => bare_plugin
+  1:LIDENT LBRACE 2:Settings RBRACE => settings_plugin
+
+nonterminal Plugins : plugins =
+  1:Plugin                 => sing_plugins
+  1:Plugin COMMA 2:Plugins => cons_plugins
+
+nonterminal OptDeriving : optional_deriving =
+  /* epsilon */ => none_deriving
+  LBRACKET DOT 1:LIDENT 2:Plugins RBRACKET => some_deriving
+               /* ^ "deriving" */
+
 /*********************/
 /* Identifier stuff. */
 /*********************/
@@ -402,8 +426,10 @@ nonterminal ConbindsCheck : conbinds =
 
 nonterminal Datbind : datbind =
   /* Same thing here as below. Weird parse ambiguity makes this necessary. */
-  tycon:TyIdent EQUAL conbinds:ConbindsCheck                        => mk_datbind_bare
-  tyvars:TyvarseqNoEmpty tycon:TyIdent EQUAL conbinds:ConbindsCheck => mk_datbind
+  tycon:TyIdent EQUAL conbinds:ConbindsCheck deriving:OptDeriving      => mk_datbind_bare
+  tyvars:TyvarseqNoEmpty tycon:TyIdent EQUAL conbinds:ConbindsCheck deriving:OptDeriving
+                                                                       => mk_datbind
+
 nonterminal Datbinds : datbinds =
   1:Datbind                                                    => sing_datbinds
   1:Datbind AND 2:Datbinds                                     => cons_datbinds
@@ -453,8 +479,8 @@ nonterminal Valdesc : valdesc =
   id:BindableIdent COLON ty:Ty => mk_valdesc
 
 nonterminal Typdesc : typdesc =
-  tyvars:Tyvarseq tycon:TyIdent             => mk_typdesc_abstract
-  tyvars:Tyvarseq tycon:TyIdent EQUAL ty:Ty => mk_typdesc_concrete
+  tyvars:Tyvarseq tycon:TyIdent deriving:OptDeriving             => mk_typdesc_abstract
+  tyvars:Tyvarseq tycon:TyIdent EQUAL ty:Ty deriving:OptDeriving => mk_typdesc_concrete
 
 nonterminal Condesc : condesc =
   1:BindableConstructor                 => id_condesc
@@ -468,8 +494,9 @@ nonterminal Exdesc : exdesc =
   id:BindableConstructor OF ty:Ty   => ty_exdesc
 
 nonterminal Datdesc : datdesc =
-  tycon:TyIdent EQUAL condescs:Condescs                        => mk_datdesc_bare
-  tyvars:TyvarseqNoEmpty tycon:TyIdent EQUAL condescs:Condescs => mk_datdesc
+  tycon:TyIdent EQUAL condescs:Condescs deriving:OptDeriving                 => mk_datdesc_bare
+  tyvars:TyvarseqNoEmpty tycon:TyIdent EQUAL condescs:Condescs deriving:OptDeriving
+                                                                             => mk_datdesc
 
 nonterminal Strdesc : strdesc =
   id:ModIdent COLON signat:Signat       => mk_strdesc

@@ -178,6 +178,34 @@ struct
     if b then SOME default
     else NONE
 
+  fun show_setting (name, value) =
+    group (
+      show_id blue name ++ text_syntax "="
+      $$
+      show_id white value
+    )
+  fun show_settings settings =
+    text_syntax "{" ++ show_list show_setting ", " settings ++ text_syntax "}"
+
+  fun show_plugin (name, settings) =
+    case settings of
+      [] => show_id white name
+    | _ => group (show_id white name $$ show_settings settings)
+  fun show_plugins plugins =
+    show_list show_plugin "," plugins
+
+  fun show_deriving deriving =
+    case deriving of
+      NONE => text white ""
+    | SOME plugins =>
+      group (
+        text_syntax "[" ++ text pink ".deriving"
+        $$
+        show_plugins plugins
+        ++
+        text_syntax "]"
+      )
+
   local
     open SMLSyntax
     val color = green
@@ -542,7 +570,7 @@ struct
             , SOME (text_syntax "=")
             , SOME (show_ty ty) ]
 
-        fun show_datbind str mark {tyvars, tycon, conbinds} =
+        fun show_datbind str mark {tyvars, tycon, conbinds, deriving} =
           group (
             separateWithSpaces
               [ SOME (text (if mark then str else "and"))
@@ -553,6 +581,8 @@ struct
             (spaces 2 ++ (show_conbind (List.nth (conbinds, 0))))
             $$
             show_list_prepend color false "|" "|" show_conbind "" (List.drop (conbinds, 1))
+            $$
+            show_deriving deriving
           )
       in
       case dec_ of
@@ -820,13 +850,15 @@ struct
           separateWithSpaces
             [ SOME (show_id id)
             , Option.map (fn ty => text_syntax "of" +-+ show_ty ty) ty ]
-        fun show_typdesc {tyvars, tycon, ty} =
+        fun show_typdesc {tyvars, tycon, ty, deriving} =
           separateWithSpaces
             [ show_tyvars_option tyvars
             , SOME (show_id tycon)
-            , Option.map (fn ty => text_syntax "=" +-+ show_ty ty) ty ]
+            , Option.map (fn ty => text_syntax "=" +-+ show_ty ty) ty
+            , SOME (show_deriving deriving)
+            ]
 
-        fun show_datbind str mark {tyvars, tycon, conbinds} =
+        fun show_datbind str mark {tyvars, tycon, conbinds, deriving} =
           group (
             separateWithSpaces
               [ SOME (text (if mark then str else "and"))
@@ -837,6 +869,8 @@ struct
             (spaces 2 ++ (show_conbind (List.nth (conbinds, 0))))
             $$
             show_list_prepend color false "|" "|" show_conbind "" (List.drop (conbinds, 1))
+            $$
+            show_deriving deriving
           )
       in
       case spec_ of
@@ -853,7 +887,7 @@ struct
           show_typdesc typdesc
       | SPeqtype typdesc =>
           show_typdesc typdesc
-      | SPdatdec {tyvars, tycon, condescs} =>
+      | SPdatdec {tyvars, tycon, condescs, deriving} =>
           let
             fun mk {tyvars, tycon, condescs} =
               group (
@@ -864,6 +898,8 @@ struct
                   , SOME (text_syntax "=") ]
                 $$
                 show_list show_condesc "| " condescs
+                $$
+                show_deriving deriving
               )
           in
             (* Conbinds look like condescs, but with an extra "opp".
@@ -872,7 +908,9 @@ struct
              *)
               show_datbind "datatype" true
                 {tyvars=tyvars, tycon=tycon, conbinds=List.map
-                  (fn {id, ty} => {opp=false, id=id, ty=ty}) condescs}
+                  (fn {id, ty} => {opp=false, id=id, ty=ty}) condescs
+                , deriving = deriving
+                }
           end
       | SPdatrepl {left_tycon, right_tycon} =>
           separateWithSpaces

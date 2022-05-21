@@ -10,22 +10,27 @@ plugins ::= <id> [<options>] (, <id> [<options>])*
 
 
 exp     ::= ...
-          | [ %<id>: <tyident> [<options>]]
+          | [ .<id>: <tyident> [<options>]]
 
 typdesc ::= ...
-          | <typdesc> [ [@@deriving <plugins>] ]
+          | <typdesc> [ [.deriving <plugins>] ]
 
 datdesc ::= ...
-          | <datdesc> [ [@@deriving <plugins>] ]
+          | <datdesc> [ [.deriving <plugins>] ]
 
 gonna need one for datatype replication too... ugh
 
 dec     ::= ...
-          | TYPE <typbinds> [ [@@deriving <plugins> ] ]
-          | DATATYPE <datbinds> [<withtypee>] [ [@@deriving <plugins>] ]
+          | TYPE <typbinds> [ [.deriving <plugins> ] ]
+          | DATATYPE <datbinds> [<withtypee>] [ [.deriving <plugins>] ]
 
 gonna need one for datatype replication here too
 
+
+- [x] add parsing support for [.deriving]
+- [ ] add parsing support for [.show: ...] expressions
+- [ ] revamp `transform` structure
+- [ ] add codegen for show
 
 
 

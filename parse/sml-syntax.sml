@@ -11,6 +11,18 @@ structure PreSMLSyntax =
       | Jatom of 'a
 
     (****************************)
+    (*        DERIVING          *)
+    (****************************)
+
+    (* Name of the setting, and its value *)
+    type setting = identifier * identifier
+    type settings = setting list
+
+    (* Plugin name, with all of its settings *)
+    type plugin = identifier * settings
+    type plugins = plugin list
+
+    (****************************)
     (*         TYPES            *)
     (****************************)
 
@@ -114,7 +126,8 @@ structure PreSMLSyntax =
     type datbind = {
         tyvars : identifier list,
         tycon : identifier,
-        conbinds : conbind list
+        conbinds : conbind list,
+        deriving : plugins option
       }
 
     datatype exp_ =
@@ -204,11 +217,13 @@ structure PreSMLSyntax =
       | Ddatrepl of {
           left_tycon : identifier,
           right_tycon : longid
+          (* TODO: datrepl plugins *)
         }
       | Dabstype of {
           datbinds : datbind list,
           withtypee : typbind list option,
           withh : dec
+          (* TODO?: abstype plugins *)
         }
       | Dexception of exbind list
       | Dlocal of {
@@ -243,7 +258,8 @@ structure PreSMLSyntax =
     type typdesc = {
         tyvars : identifier list,
         tycon : identifier,
-        ty : ty option
+        ty : ty option,
+        deriving : plugins option
       }
 
     datatype strdec_ =
@@ -299,11 +315,13 @@ structure PreSMLSyntax =
       | SPdatdec of {
           tyvars : identifier list,
           tycon : identifier,
-          condescs : condesc list
+          condescs : condesc list,
+          deriving : plugins option
         }
       | SPdatrepl of {
           left_tycon : identifier,
           right_tycon : longid
+          (* TODO: datrepl plugins *)
         }
       | SPexception of {
           id : identifier,
@@ -370,6 +388,13 @@ signature SMLSYNTAX =
     val id_eq : identifier * identifier -> bool
     val longid_to_string : longid -> string
     val juxta_span : ('a list -> 'b) -> 'a juxta list -> 'b
+
+    (* DERIVING *)
+    type setting = identifier * identifier
+    type settings = setting list
+
+    type plugin = identifier * settings
+    type plugins = plugin list
 
     (* TYPES *)
 
@@ -448,6 +473,13 @@ structure SMLSyntax : SMLSYNTAX =
         (List.map (Symbol.toValue o Node.getVal) id)
     fun juxta_span list_span juxtas =
       list_span (List.map (fn Jident (_, a) => a | Jatom a => a) juxtas)
+
+    (* DERIVING *)
+    type setting = PreSMLSyntax.setting
+    type settings = PreSMLSyntax.settings
+
+    type plugin = PreSMLSyntax.plugin
+    type plugins = PreSMLSyntax.plugins
 
     (* TYPES *)
 
