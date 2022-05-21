@@ -1,0 +1,19 @@
+Group
+  structure ListUtils
+  structure PrettySimpleDoc
+  structure Common
+  structure Pair
+
+  structure OptionMonad
+  structure TerminalColors
+is
+  ListUtils.sml
+  PrettySimpleDoc.sml
+  Common.sml
+  Pair.sml
+
+  MONAD.sig
+  OptionMonad.sml
+
+  TerminalColors.sml
+  ../cmlib/cmlib.cm

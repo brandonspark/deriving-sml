@@ -1,0 +1,34 @@
+
+The general change to the grammar looks like the following:
+
+NEW:
+
+options ::= { <id> = <id> (, <id> = <id>)* }
+
+plugins ::= <id> [<options>] (, <id> [<options>])*
+
+
+
+exp     ::= ...
+          | [ %<id>: <tyident> [<options>]]
+
+typdesc ::= ...
+          | <typdesc> [ [@@deriving <plugins>] ]
+
+datdesc ::= ...
+          | <datdesc> [ [@@deriving <plugins>] ]
+
+gonna need one for datatype replication too... ugh
+
+dec     ::= ...
+          | TYPE <typbinds> [ [@@deriving <plugins> ] ]
+          | DATATYPE <datbinds> [<withtypee>] [ [@@deriving <plugins>] ]
+
+gonna need one for datatype replication here too
+
+
+
+
+- Can't do NJ extensions (in particular, functor syntactic sugar).
+  - Not a big deal, except for the fact that we really should, for best usage
+    experience

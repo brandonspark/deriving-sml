@@ -1,0 +1,2 @@
+Skeleton 5
+d6f4дўSMLSyntax"дўSpan"дўContext"дўNode"CaгўPRECEDENCE"и0aгўPRECEDENCE_ARG"я7aеўPrecedenceFun"i2aдўArg"gp1я:f±яЃ!jh4egp1яegpяЃ-f7яяCd"Int"d"Symbol"дўError"яя!Nad"Table"gp1d"SymbolHashTable"gp1я*ad"ExpPrecedence"jh1aяЃ!h2езр±яf1я!зр±яЃad"PatPrecedence"jh1aяЃ!h2яѓ f3d"PrettyPrintAst"я‚я!яѓ*N
