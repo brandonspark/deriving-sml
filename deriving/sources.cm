@@ -1,0 +1,11 @@
+Group
+  structure Show
+is
+  ../syntax/sources.cm
+  ../lex/sources.cm
+
+  temp_id.sml
+
+  deriving.sig
+
+  show.sml

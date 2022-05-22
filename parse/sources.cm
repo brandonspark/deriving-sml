@@ -11,16 +11,13 @@ is
   ../lex/sources.cm
   ../utils/sources.cm
 
-  sml-syntax.sml
+  ../syntax/sources.cm
 
-  context.sml
   dict.sml
   scoped_dict.sml
 
   precedence.sml
   transform.sml
-
-  PrettyPrintAst.sml
 
   parser.fun
   parser.sml

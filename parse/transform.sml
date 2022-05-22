@@ -1,4 +1,11 @@
 
+(* Transform contains all the logic for post-processing the parsed AST.
+ *
+ * This includes the duties of:
+ * - Fixing ambiguities in juxtaposed patterns/expressions due to infix operators
+ * - Codegen for derived attributes on types
+ *)
+
 signature TRANSFORM =
   sig
     val transform : SMLSyntax.ast -> SMLSyntax.ast
@@ -27,6 +34,8 @@ structure Transform : TRANSFORM =
     type bindings = unit ScopeDict.t
     datatype assoc = Left | Right
 
+    fun sing x = [x]
+
     (* For when we have the result we need, but we need to map it and place it
      * inside of a separate node. We keep the context, too. *)
     fun expand_node_with_ctx map_f node (result, ctx) =
@@ -41,6 +50,10 @@ structure Transform : TRANSFORM =
         ([], ctx)
         xs
       |> Pair.map_fst List.rev
+
+    (****************
+     * DECLARATIONS *
+     ****************)
 
     fun transform_strdec ctx strdec =
       let open SMLSyntax in
@@ -77,6 +90,10 @@ structure Transform : TRANSFORM =
             |> expand_node_with_ctx DMseq strdec
         | DMempty => (strdec, ctx)
       end
+
+    (**********************
+     * MODULE EXPRESSIONS *
+     **********************)
 
     and transform_module ctx module =
       let open SMLSyntax in
@@ -174,7 +191,13 @@ structure Transform : TRANSFORM =
 
     and transform_exbinds ctx exbinds = (exbinds, ctx)
 
-    and transform_dec ctx dec =
+    (****************
+     * DECLARATIONS *
+     ****************)
+
+    (* transform_dec' turns one declaration into one or more declarations
+     *)
+    and transform_dec' ctx dec =
       let open SMLSyntax in
         case Node.getVal dec of
           Dval {recc, tyvars, valbinds} =>
@@ -190,16 +213,24 @@ structure Transform : TRANSFORM =
               valbinds
             |> Pair.map_fst (fn valbinds => {recc=recc, tyvars=tyvars, valbinds=List.rev valbinds})
             |> expand_node_with_ctx Dval dec
+            |> sing
         | Dfun {tyvars, fvalbinds} =>
             let
               val (fvalbinds, ctx) = transform_fvalbinds ctx fvalbinds
             in
               ({tyvars=tyvars, fvalbinds=fvalbinds}, ctx)
               |> expand_node_with_ctx Dfun dec
+              |> sing
             end
         | Dtype typbinds =>
             transform_typbinds ctx typbinds
             |> expand_node_with_ctx Dtype dec
+            (* TODO: do deriving stuff here *)
+
+        (* DERIVING STUFF HERE
+         * So, because we have to do code generation on the AST, we have to
+         * start at a higher granularity than just the `datbind` itself. So, we
+         * change any instance of a `Ddatdec`*)
         | Ddatdec {datbinds, withtypee} =>
             let
               val (datbinds, ctx) = transform_datbinds ctx datbinds
@@ -215,6 +246,8 @@ structure Transform : TRANSFORM =
               ({datbinds=datbinds, withtypee=withtypee}, ctx)
               |> expand_node_with_ctx Ddatdec dec
             end
+            (* TODO: do deriving stuff here *)
+
         | Dabstype {datbinds, withtypee, withh} =>
             let
               val (datbinds, ctx) = transform_datbinds ctx datbinds
@@ -225,14 +258,17 @@ structure Transform : TRANSFORM =
                       (SOME typbinds, ctx)
                     end
                 | NONE => (NONE, ctx)
-              val (withh, ctx) = transform_dec ctx dec
+              val (withh, ctx) = transform_dec ctx withh
             in
               ({datbinds=datbinds, withtypee=withtypee, withh=withh}, ctx)
               |> expand_node_with_ctx Dabstype dec
             end
+            (* TODO: do deriving stuff here? *)
+
         | Dexception exbinds =>
             transform_exbinds ctx exbinds
             |> expand_node_with_ctx Dexception dec
+            |> sing
         | Dlocal {left_dec, right_dec} =>
             let
               val new_ctx = Context.new_scope ctx
@@ -242,6 +278,7 @@ structure Transform : TRANSFORM =
             in
               ({left_dec=left_dec, right_dec=right_dec}, Context.pop_penultimate new_ctx)
               |> expand_node_with_ctx Dlocal dec
+              |> sing
             end
         | Dseq decs =>
             fold_transform
@@ -249,6 +286,9 @@ structure Transform : TRANSFORM =
               ctx
               decs
             |> expand_node_with_ctx Dseq dec
+            (* TODO: some subsidiary decs may now be Dseq. need to flatten that out.
+             * *)
+
         | Dinfix {precedence, ids} =>
             let
               val precedence = OptionMonad.value precedence 0
@@ -263,6 +303,7 @@ structure Transform : TRANSFORM =
                   ids
             in
               (dec, new_ctx)
+              |> sing
             end
           | Dinfixr {precedence, ids} =>
             let
@@ -278,6 +319,7 @@ structure Transform : TRANSFORM =
                   ids
             in
               (dec, new_ctx)
+              |> sing
             end
           | Dnonfix ids =>
             let
@@ -288,11 +330,18 @@ structure Transform : TRANSFORM =
                   ids
             in
               (dec, new_ctx)
+              |> sing
             end
-        | ( Ddatrepl _
+        | ( Ddatrepl _ (* TODO: datrepl deriving *)
           | Dopen _
-          | Dempty ) => (dec, ctx)
+          | Dempty ) =>
+              (dec, ctx)
+              |> sing
       end
+
+    (***************
+     * EXPRESSIONS *
+     ***************)
 
     and transform_exp ctx exp =
       let open SMLSyntax in
@@ -475,6 +524,10 @@ structure Transform : TRANSFORM =
           | Econstr _ ) => (exp, ctx)
       end
 
+    (****************
+     * ROW PATTERNS *
+     ****************)
+
     and transform_patrow ctx patrow =
       let open SMLSyntax in
         case patrow of
@@ -497,6 +550,10 @@ structure Transform : TRANSFORM =
             end
         | PRellipsis => (patrow, ctx)
       end
+
+    (************
+     * PATTERNS *
+     ************)
 
     and transform_pat ctx pat =
       let open SMLSyntax in
@@ -621,6 +678,10 @@ structure Transform : TRANSFORM =
         |> expand_node_with_ctx Fn.id sigdec
       end
 
+    (*************************
+     * SIGNATURE EXPRESSIONS *
+     *************************)
+
     and transform_signat ctx signat =
       let open SMLSyntax in
         case Node.getVal signat of
@@ -663,24 +724,33 @@ structure Transform : TRANSFORM =
           |> Pair.map_fst
               (fn ty => {tyvars=tyvars, tycon=tycon, ty=SOME ty, deriving=deriving})
 
-    and transform_spec ctx spec =
+    (****************************
+     * SIGNATURE SPECIFICATIONS *
+     ****************************)
+
+    (* transform_spec' turns a spec into one or more specs *)
+    and transform_spec' ctx spec =
       let open SMLSyntax in
         case Node.getVal spec of
           SPval {id, ty} =>
             transform_ty ctx ty
             |> Pair.map_fst (fn ty => {id=id, ty=ty})
             |> expand_node_with_ctx SPval spec
+            |> sing
         | SPtype typdesc =>
             transform_typdesc ctx typdesc
             |> expand_node_with_ctx SPtype spec
+            (* TODO: deriving stuff *)
         | SPeqtype typdesc =>
             transform_typdesc ctx typdesc
             |> expand_node_with_ctx SPeqtype spec
+            (* TODO: deriving stuff *)
         | SPdatdec {tyvars, tycon, condescs, deriving} =>
             transform_condescs ctx condescs
             |> Pair.map_fst (fn condescs =>
                 {tyvars=tyvars, tycon=tycon, condescs=condescs, deriving=deriving})
             |> expand_node_with_ctx SPdatdec spec
+            (* TODO: deriving stuff *)
         | SPexception {id, ty} =>
             let
               val (ty, ctx) =
@@ -689,15 +759,18 @@ structure Transform : TRANSFORM =
                 | SOME ty => transform_ty ctx ty |> Pair.map_fst SOME
             in
               ({id=id, ty=ty}, ctx)
+              |> sing
             end
             |> expand_node_with_ctx SPexception spec
         | SPmodule {id, signat} =>
             transform_signat ctx signat
             |> Pair.map_fst (fn signat => {id=id, signat=signat})
             |> expand_node_with_ctx SPmodule spec
+            |> sing
         | SPinclude signat =>
             transform_signat ctx signat
             |> expand_node_with_ctx SPinclude spec
+            |> sing
         | SPsharing {specs, tycons} =>
             List.foldl
               (fn (spec, (specs, ctx)) =>
@@ -708,7 +781,11 @@ structure Transform : TRANSFORM =
             |> Pair.map_fst List.rev
             |> Pair.map_fst (fn specs => {specs=specs, tycons=tycons})
             |> expand_node_with_ctx SPsharing spec
-        | ( SPdatrepl _ ) => (spec, ctx)
+            |> sing
+        | ( SPdatrepl _ ) =>
+            (spec, ctx)
+            |> sing
+            (* TODO: datrepl deriving *)
       end
 
     (* when entering a module, push a new scope

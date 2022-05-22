@@ -27,9 +27,13 @@ dec     ::= ...
 gonna need one for datatype replication here too
 
 
-- [x] add parsing support for [.deriving]
+- [x] add parsing support for [.deriving] on typdescs, datdescs, typedecs, datdecs
+- [ ] add parsing support for [.deriving] on datrepls
 - [ ] add parsing support for [.show: ...] expressions
 - [ ] revamp `transform` structure
+      NOTE: maybe not possible... `transform` needs to work at a higher
+      granularity, since decs may be expanded into more than just one dec.
+      For now, hardcoded on `spec` and `dec`.
 - [ ] add codegen for show
 
 
@@ -37,3 +41,11 @@ gonna need one for datatype replication here too
 - Can't do NJ extensions (in particular, functor syntactic sugar).
   - Not a big deal, except for the fact that we really should, for best usage
     experience
+- The parser we're using (from mlc) was never intended for altering source text.
+  - This parser was meant to be used for a compiler, meaning that it strips down
+    some of the literal syntactic information for equivalent semantic information.
+  - In particular, something like `op+ (1, 2)` is represented the same as `1 + 2`.
+  - This means that recovering the original program is impossible.
+  - As such, we're constrained so that `deriving` should work "invisibly", and not
+    show anything that it generates. Granted, this is how OCaml's works too, so
+    maybe it's fine.
