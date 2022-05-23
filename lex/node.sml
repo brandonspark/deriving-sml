@@ -5,6 +5,7 @@ signature NODE =
 
     val create : 'a * Span.span -> 'a t
     val create2 : 'a -> Span.span -> 'a t
+    val create_absurd : 'a -> 'a t
     val expose : 'a t -> {value: 'a, span: Span.span}
     val nest : 'a t -> 'a t t
 
@@ -33,6 +34,7 @@ structure Node : NODE =
 
     fun create (value, span) = {value=value, span=span}
     fun create2 value span = create (value, span)
+    fun create_absurd value = create (value, Span.absurd)
     fun expose {value, span} = create (value, span)
     fun nest (input as {value, span}) = {value=input, span=span}
 

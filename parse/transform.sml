@@ -34,7 +34,9 @@ structure Transform : TRANSFORM =
     type bindings = unit ScopeDict.t
     datatype assoc = Left | Right
 
-    fun sing x = [x]
+    fun mk_sing (x, ctx) = ([x], ctx)
+    fun fix_codegen (l, ctx) =
+      (List.map (fn x => Node.create_absurd x) l, ctx)
 
     (* For when we have the result we need, but we need to map it and place it
      * inside of a separate node. We keep the context, too. *)
@@ -213,19 +215,20 @@ structure Transform : TRANSFORM =
               valbinds
             |> Pair.map_fst (fn valbinds => {recc=recc, tyvars=tyvars, valbinds=List.rev valbinds})
             |> expand_node_with_ctx Dval dec
-            |> sing
+            |> mk_sing
         | Dfun {tyvars, fvalbinds} =>
             let
               val (fvalbinds, ctx) = transform_fvalbinds ctx fvalbinds
             in
               ({tyvars=tyvars, fvalbinds=fvalbinds}, ctx)
               |> expand_node_with_ctx Dfun dec
-              |> sing
+              |> mk_sing
             end
         | Dtype typbinds =>
             transform_typbinds ctx typbinds
             |> expand_node_with_ctx Dtype dec
-            (* TODO: do deriving stuff here *)
+            |> Show.codegen_dec
+            |> fix_codegen
 
         (* DERIVING STUFF HERE
          * So, because we have to do code generation on the AST, we have to
@@ -245,8 +248,9 @@ structure Transform : TRANSFORM =
             in
               ({datbinds=datbinds, withtypee=withtypee}, ctx)
               |> expand_node_with_ctx Ddatdec dec
+              |> Show.codegen_dec
+              |> fix_codegen
             end
-            (* TODO: do deriving stuff here *)
 
         | Dabstype {datbinds, withtypee, withh} =>
             let
@@ -262,13 +266,14 @@ structure Transform : TRANSFORM =
             in
               ({datbinds=datbinds, withtypee=withtypee, withh=withh}, ctx)
               |> expand_node_with_ctx Dabstype dec
+              |> Show.codegen_dec
+              |> fix_codegen
             end
-            (* TODO: do deriving stuff here? *)
 
         | Dexception exbinds =>
             transform_exbinds ctx exbinds
             |> expand_node_with_ctx Dexception dec
-            |> sing
+            |> mk_sing
         | Dlocal {left_dec, right_dec} =>
             let
               val new_ctx = Context.new_scope ctx
@@ -278,17 +283,23 @@ structure Transform : TRANSFORM =
             in
               ({left_dec=left_dec, right_dec=right_dec}, Context.pop_penultimate new_ctx)
               |> expand_node_with_ctx Dlocal dec
-              |> sing
+              |> mk_sing
             end
         | Dseq decs =>
             fold_transform
               transform_dec
               ctx
               decs
-            |> expand_node_with_ctx Dseq dec
-            (* TODO: some subsidiary decs may now be Dseq. need to flatten that out.
-             * *)
-
+            |> Pair.map_fst
+                ( List.foldr
+                  (fn (dec, acc) =>
+                    (case Node.getVal dec of
+                      Dseq decs => decs @ acc
+                    | _ => dec :: acc
+                    )
+                  )
+                  []
+                )
         | Dinfix {precedence, ids} =>
             let
               val precedence = OptionMonad.value precedence 0
@@ -303,7 +314,7 @@ structure Transform : TRANSFORM =
                   ids
             in
               (dec, new_ctx)
-              |> sing
+              |> mk_sing
             end
           | Dinfixr {precedence, ids} =>
             let
@@ -319,7 +330,7 @@ structure Transform : TRANSFORM =
                   ids
             in
               (dec, new_ctx)
-              |> sing
+              |> mk_sing
             end
           | Dnonfix ids =>
             let
@@ -330,14 +341,19 @@ structure Transform : TRANSFORM =
                   ids
             in
               (dec, new_ctx)
-              |> sing
+              |> mk_sing
             end
         | ( Ddatrepl _ (* TODO: datrepl deriving *)
           | Dopen _
           | Dempty ) =>
               (dec, ctx)
-              |> sing
+              |> mk_sing
       end
+    and transform_dec ctx dec =
+      case transform_dec' ctx dec of
+        ([], _) => raise Fail "I think something went wrong"
+      | ([dec], ctx) => (dec, ctx)
+      | (mult, ctx) => (Node.create_absurd (Dseq mult), ctx)
 
     (***************
      * EXPRESSIONS *
@@ -689,10 +705,9 @@ structure Transform : TRANSFORM =
             List.foldl
               (fn (spec, (specs, ctx)) =>
                 transform_spec ctx spec
-                |> Pair.map_fst (fn spec => spec :: specs))
+                |> Pair.map_fst (fn new_specs => specs @ new_specs))
               ([], ctx)
               specs
-            |> Pair.map_fst List.rev
             |> expand_node_with_ctx Sspec signat
         | Sident ident => (signat, ctx)
         | Swhere {signat, wheretypee={tyvars, id, ty}} =>
@@ -728,29 +743,32 @@ structure Transform : TRANSFORM =
      * SIGNATURE SPECIFICATIONS *
      ****************************)
 
-    (* transform_spec' turns a spec into one or more specs *)
-    and transform_spec' ctx spec =
+    (* transform_spec turns a spec into one or more specs *)
+    and transform_spec ctx spec =
       let open SMLSyntax in
         case Node.getVal spec of
           SPval {id, ty} =>
             transform_ty ctx ty
             |> Pair.map_fst (fn ty => {id=id, ty=ty})
             |> expand_node_with_ctx SPval spec
-            |> sing
+            |> mk_sing
         | SPtype typdesc =>
             transform_typdesc ctx typdesc
             |> expand_node_with_ctx SPtype spec
-            (* TODO: deriving stuff *)
+            |> Show.codegen_spec
+            |> fix_codegen
         | SPeqtype typdesc =>
             transform_typdesc ctx typdesc
             |> expand_node_with_ctx SPeqtype spec
-            (* TODO: deriving stuff *)
+            |> Show.codegen_spec
+            |> fix_codegen
         | SPdatdec {tyvars, tycon, condescs, deriving} =>
             transform_condescs ctx condescs
             |> Pair.map_fst (fn condescs =>
                 {tyvars=tyvars, tycon=tycon, condescs=condescs, deriving=deriving})
             |> expand_node_with_ctx SPdatdec spec
-            (* TODO: deriving stuff *)
+            |> Show.codegen_spec
+            |> fix_codegen
         | SPexception {id, ty} =>
             let
               val (ty, ctx) =
@@ -759,33 +777,32 @@ structure Transform : TRANSFORM =
                 | SOME ty => transform_ty ctx ty |> Pair.map_fst SOME
             in
               ({id=id, ty=ty}, ctx)
-              |> sing
             end
             |> expand_node_with_ctx SPexception spec
+            |> mk_sing
         | SPmodule {id, signat} =>
             transform_signat ctx signat
             |> Pair.map_fst (fn signat => {id=id, signat=signat})
             |> expand_node_with_ctx SPmodule spec
-            |> sing
+            |> mk_sing
         | SPinclude signat =>
             transform_signat ctx signat
             |> expand_node_with_ctx SPinclude spec
-            |> sing
+            |> mk_sing
         | SPsharing {specs, tycons} =>
             List.foldl
               (fn (spec, (specs, ctx)) =>
                 transform_spec ctx spec
-                |> Pair.map_fst (fn spec => spec::specs))
+                |> Pair.map_fst (fn new_specs => specs @ new_specs))
               ([], ctx)
               specs
-            |> Pair.map_fst List.rev
             |> Pair.map_fst (fn specs => {specs=specs, tycons=tycons})
             |> expand_node_with_ctx SPsharing spec
-            |> sing
+            |> mk_sing
         | ( SPdatrepl _ ) =>
             (spec, ctx)
-            |> sing
-            (* TODO: datrepl deriving *)
+            |> Show.codegen_spec
+            |> fix_codegen
       end
 
     (* when entering a module, push a new scope

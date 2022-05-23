@@ -9,7 +9,7 @@
 signature DERIVING =
   sig
 
-    val codegen_dec : SMLSyntax.dec_ -> Context.t -> SMLSyntax.dec_ list
-    val codegen_spec : SMLSyntax.spec_ -> Context.t -> SMLSyntax.spec_ list
+    val codegen_dec : SMLSyntax.dec * Context.t -> SMLSyntax.dec_ list * Context.t
+    val codegen_spec : SMLSyntax.spec * Context.t -> SMLSyntax.spec_ list * Context.t
 
   end

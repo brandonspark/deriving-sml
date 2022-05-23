@@ -13,6 +13,8 @@ is
 
   ../syntax/sources.cm
 
+  ../deriving/sources.cm
+
   dict.sml
   scoped_dict.sml
 

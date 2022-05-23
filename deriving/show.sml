@@ -312,6 +312,22 @@ structure Show : DERIVING =
              | SOME (_, _::_) => raise Fail "show currently does not take options!"
              )
 
+    fun mk_fundec mk_init id =
+      let
+        val s = id_to_string id
+      in
+        [ mk_init (mk_id ("show_" ^ s))
+        , [ { opp = false
+            , id = mk_id (s ^ "_show")
+            , pats = [Pident x]
+            , ty = NONE
+            , exp = Eapp { left = Eident [mk_id ("show_" ^ s)]
+                         , right = Eident [x]
+                         }
+            }
+          ]
+        ]
+      end
 
     fun codegen_datbind {tyvars, tycon, conbinds, deriving} ctx =
       if not (verify_deriving deriving) then
@@ -344,7 +360,7 @@ structure Show : DERIVING =
               (fn {id = conid, ty = tyopt, opp} =>
                 case tyopt of
                   NONE =>
-                    { pat = promote Pwild, exp = Estring (id_to_string conid) }
+                    { pat = Pident conid, exp = Estring (id_to_string conid) }
                 | SOME ty =>
                     let
                       (* Not a `type` dec, so no need for the name. *)
@@ -364,7 +380,7 @@ structure Show : DERIVING =
               val principal_arg = new ()
             in
               [ { opp = false
-                , id = id_of_str id
+                , id = id
                 , pats = fn_pats @ [Pident principal_arg]
                 , ty = NONE
                 , exp =
@@ -377,14 +393,14 @@ structure Show : DERIVING =
             end
         in
           (* TODO?: can also make it just "show" if it's called "t" *)
-          [ mk_show_fvalbind ("show_" ^ id_to_string tycon)
-          , mk_show_fvalbind (id_to_string tycon ^ "_show")
-          ]
+          mk_fundec mk_show_fvalbind tycon
         end
 
+    fun add_init (init, ctx) x = (init::x, ctx)
 
-    fun codegen_dec dec ctx =
-      case dec of
+    fun codegen_dec (dec, ctx) =
+      add_init (Node.getVal dec, ctx)
+      ( case Node.getVal dec of
         Ddatdec { datbinds, withtypee } =>
           (* Collect a list of all of the different function val binds, which
            * will then be placed in a single `Dfun` to `and` them together.
@@ -409,7 +425,7 @@ structure Show : DERIVING =
                    }
               ]
             )
-      | Ddatrepl _ => [dec] (* TODO: add datrepl support *)
+      | Ddatrepl _ => [] (* TODO: add datrepl support *)
       | Dtype typbinds =>
           List.foldl
             (fn ({tyvars, tycon, ty, deriving}, acc) =>
@@ -429,16 +445,14 @@ structure Show : DERIVING =
                    *)
                   fun mk_show_fvalbind id =
                     [ { opp = false
-                      , id = id_of_str id
+                      , id = id
                       , pats = fn_pats @ [pat]
                       , ty = NONE
                       , exp = exp
                       }
                     ]
                 in
-                  [ mk_show_fvalbind ("show_" ^ id_to_string tycon)
-                  , mk_show_fvalbind (id_to_string tycon ^ "_show")
-                  ]
+                  mk_fundec mk_show_fvalbind tycon
                 end
             )
             []
@@ -463,6 +477,7 @@ structure Show : DERIVING =
         | Dinfix _
         | Dinfixr _
         | Dnonfix _ ) => []
+    )
 
     val old_tident = Tident
     fun Tident x = promote (old_tident x)
@@ -473,8 +488,9 @@ structure Show : DERIVING =
     val old_tarrow = Tarrow
     fun Tarrow x = promote (old_tarrow x)
 
-    fun codegen_spec spec ctx =
-      case spec of
+    fun codegen_spec (spec, ctx) =
+      add_init (Node.getVal spec, ctx)
+      ( case Node.getVal spec of
         SPtype {tyvars, tycon, ty = tyopt, deriving} =>
           if not (verify_deriving deriving) then
             []
@@ -545,4 +561,5 @@ structure Show : DERIVING =
         | SPinclude _
         | SPsharing _
         | SPval _ ) => []
+      )
   end

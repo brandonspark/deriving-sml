@@ -504,7 +504,7 @@ structure Parser :> PARSER =
         (***************)
 
         (* Valbinds. *)
-        type valbind = valbind
+        type valbind = { pat : pat, exp : exp }
         type valbinds = valbind list
         val mk_valbind = identity
         val sing_valbinds = sing
@@ -527,7 +527,7 @@ structure Parser :> PARSER =
         fun some_int node = SOME (Node.getVal node)
 
         (* Function clauses. *)
-        type fvalclause = fvalclause
+        type fvalclause = { opp : bool, id : identifier, pats : pat list, ty : ty option, exp : exp }
         type fvalclauses = fvalclause list
         fun mk_fvalclause {left, id, atpats, ty, exp} =
           { opp=true, id=id, pats=atpats, ty=ty, exp=exp }
@@ -723,14 +723,19 @@ structure Parser :> PARSER =
         (*********************)
 
         (* Valdescs. *)
-        type valdesc = valdesc
+        type valdesc = { id : identifier, ty : ty }
         type valdescs = valdesc list
         val mk_valdesc = identity
         val sing_valdescs = sing
         val cons_valdescs = op ::
 
         (* Typdescs. *)
-        type typdesc = typdesc
+        type typdesc =
+          { tyvars : identifier list
+          , tycon : identifier
+          , ty : ty option
+          , deriving : plugins option
+          }
         type typdescs = typdesc list
         fun mk_typdesc_abstract {tyvars, tycon, deriving} =
           {tyvars=tyvars, tycon=tycon, ty=NONE, deriving=deriving}
@@ -740,7 +745,7 @@ structure Parser :> PARSER =
         val cons_typdescs = op ::
 
         (* Condescs. *)
-        type condesc = condesc
+        type condesc = {id : identifier, ty : ty option}
         type condescs = condesc list
         fun id_condesc id = {id=id, ty=NONE}
         fun ty_condesc {id, ty} = {id=id, ty=SOME ty}
@@ -756,7 +761,12 @@ structure Parser :> PARSER =
         val cons_exdescs = op ::
 
         (* Datdescs. *)
-        type datdesc = datdesc
+        type datdesc = {
+          tyvars : identifier list,
+          tycon : identifier,
+          condescs : condescs,
+          deriving : plugins option
+        }
         type datdescs = datdesc list
         fun mk_datdesc_bare {tycon, condescs, deriving} =
           {tyvars=[], tycon=tycon, condescs=condescs, deriving=deriving}
@@ -861,7 +871,11 @@ structure Parser :> PARSER =
             Node.create ( Mlet {dec=dec, module=module}
                         , Span.join left right )
 
-          type strbind = strbind
+          type strbind = {
+              id : identifier,
+              seal : { opacity : opacity, signat : signat } option,
+              module : module
+            }
           type strbinds = strbind list
           fun mk_strbind_bare {id, module} =
             {id=id, seal=NONE, module=module}
