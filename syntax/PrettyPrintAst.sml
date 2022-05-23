@@ -563,12 +563,14 @@ struct
                 , bool_to_option right_opp (text_syntax "op")
                 , SOME (show_longid right_id) ]
 
-        fun show_typbind {tyvars, tycon, ty} =
+        fun show_typbind {tyvars, tycon, ty, deriving} =
           separateWithSpaces
             [ show_tyvars_option tyvars
             , SOME (show_id tycon)
             , SOME (text_syntax "=")
-            , SOME (show_ty ty) ]
+            , SOME (show_ty ty)
+            , SOME (show_deriving deriving)
+            ]
 
         fun show_datbind str mark {tyvars, tycon, conbinds, deriving} =
           group (

@@ -121,7 +121,8 @@ structure PreSMLSyntax =
     type typbind = {
         tyvars : identifier list,
         tycon : identifier,
-        ty : ty
+        ty : ty,
+        deriving : plugins option
       }
     type datbind = {
         tyvars : identifier list,

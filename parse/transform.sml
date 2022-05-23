@@ -131,9 +131,9 @@ structure Transform : TRANSFORM =
 
     and transform_typbinds ctx typbinds =
       List.foldl
-        (fn ({tyvars, tycon, ty}, (typbinds, ctx)) =>
+        (fn ({tyvars, tycon, ty, deriving}, (typbinds, ctx)) =>
           transform_ty ctx ty
-          |> Pair.map_fst (fn ty => {tyvars=tyvars, tycon=tycon, ty=ty}::typbinds))
+          |> Pair.map_fst (fn ty => {tyvars=tyvars, tycon=tycon, ty=ty, deriving=deriving}::typbinds))
         ([], ctx)
         typbinds
       |> Pair.map_fst List.rev

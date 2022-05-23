@@ -405,7 +405,7 @@ nonterminal Fvalbinds : fvalbinds =
   1:FvalbindsUnchecked       => check_fvalbinds
 
 nonterminal Typbind : typbind =
-  tyvars:Tyvarseq tycon:TyIdent EQUAL ty:Ty => mk_typbind
+  tyvars:Tyvarseq tycon:TyIdent EQUAL ty:Ty deriving:OptDeriving => mk_typbind
 nonterminal TypbindsUnchecked : typbinds =
   1:Typbind                                 => sing_typbinds
   1:Typbind AND 2:TypbindsUnchecked         => cons_typbinds
