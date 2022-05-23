@@ -105,6 +105,7 @@ structure Transform : TRANSFORM =
               val new_ctx = Context.new_scope ctx
               val (strdec, new_ctx) = transform_strdec new_ctx strdec
             in
+              (* ctx, because we lose all the information we just got *)
               (strdec, ctx)
               |> expand_node_with_ctx Mstruct module
             end
@@ -121,6 +122,7 @@ structure Transform : TRANSFORM =
             |> Pair.map_fst (fn module => {functorr=functorr, module=module})
             |> expand_node_with_ctx Mapp module
         | Mlet {dec, module} =>
+            (* TODO: this does not seem right *)
             let
               val (strdec, new_ctx) = transform_strdec ctx dec
               val (module, new_ctx) = transform_module new_ctx module
@@ -276,11 +278,14 @@ structure Transform : TRANSFORM =
             |> mk_sing
         | Dlocal {left_dec, right_dec} =>
             let
+              (* For the stuff declared in the `local` *)
               val new_ctx = Context.new_scope ctx
               val (left_dec, new_ctx) = transform_dec new_ctx left_dec
+              (* For the stuff declared in the `in` *)
               val new_ctx = Context.new_scope new_ctx
               val (right_dec, new_ctx) = transform_dec new_ctx right_dec
             in
+              (* Pop penultimate, to get rid of the local stuff *)
               ({left_dec=left_dec, right_dec=right_dec}, Context.pop_penultimate new_ctx)
               |> expand_node_with_ctx Dlocal dec
               |> mk_sing

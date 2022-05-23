@@ -11,5 +11,6 @@ signature DERIVING =
 
     val codegen_dec : SMLSyntax.dec * Context.t -> SMLSyntax.dec_ list * Context.t
     val codegen_spec : SMLSyntax.spec * Context.t -> SMLSyntax.spec_ list * Context.t
+    val from_ty : SMLSyntax.ty -> SMLSyntax.pat * SMLSyntax.exp
 
   end

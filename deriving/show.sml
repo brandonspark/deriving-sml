@@ -107,12 +107,12 @@ structure Show : DERIVING =
                     if id_eq (ty_id, tycon) then
                       raise Fail "type alias defined in terms of itself"
                     else
-                      Eapp { left = Eident (long_ty_to_show [id])
+                      Eapp { left = Eident (long_ty_to_show [ty_id])
                            , right = Eident [id]
                            }
                 | NONE =>
                     (* is it the same as the thing we're currently deriving? *)
-                    Eapp { left = Eident (long_ty_to_show [id])
+                    Eapp { left = Eident (long_ty_to_show [ty_id])
                          , right = Eident [id]
                          }
                 )
@@ -269,7 +269,6 @@ structure Show : DERIVING =
             end
       end
 
-
     (* This function associates the tyvars to the desired patterns, indexed by
      * tyvar, and then also a function which produces the right name from the
      * right tyvar.
@@ -299,6 +298,20 @@ structure Show : DERIVING =
       in
         (fn_pats, get_tyvar_fn)
       end
+
+    fun from_ty ty =
+      (* TODO: doesn't allow any type variables, but could allow to produce a
+       * "partially instantiated" show function
+       *)
+      ty_to_code
+        (fn _ => raise Fail "no top-level tyvars in show")
+        ty
+        (* TODO: this only works because context is currently unused
+         *)
+        (Context.init)
+        NONE
+
+
 
     fun verify_deriving deriving =
       case deriving of

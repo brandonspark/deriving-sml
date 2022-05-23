@@ -30,11 +30,11 @@ gonna need one for datatype replication here too
 - [x] add parsing support for [.deriving] on typdescs, datdescs, typedecs, datdecs
 - [ ] add parsing support for [.deriving] on datrepls
 - [ ] add parsing support for [.show: ...] expressions
-- [ ] revamp `transform` structure
+- [X] revamp `transform` structure
       NOTE: maybe not possible... `transform` needs to work at a higher
       granularity, since decs may be expanded into more than just one dec.
       For now, hardcoded on `spec` and `dec`.
-- [ ] add codegen for show
+- [X] add codegen for show
 
 
 

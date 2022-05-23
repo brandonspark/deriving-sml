@@ -1,7 +1,7 @@
 
 structure Foo =
   struct
-    type t =
+    datatype t =
         One
       | Two [.deriving show]
 
@@ -9,5 +9,5 @@ structure Foo =
     val y = [.show: t] One
   end
 
-val x = [.show: Foo.t] One
-val y = Foo.show_t One
+val x = [.show: Foo.t] Foo.One
+val y = Foo.show_t Foo.One

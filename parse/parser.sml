@@ -193,6 +193,21 @@ structure Parser :> PARSER =
               [] => Node.create (Eunit, Span.join left right)
             | [exp] => Node.create (Node.getVal exp, Span.join left right)
             | other => Node.create (Etuple other, Span.join left right)
+          fun deriving_exp {left, plugin, ty, right} =
+            (* TODO: if the type doesn't exist, you're gonna have a bunch of
+             * nonsense
+             *)
+            case id_to_string plugin of
+              "show" =>
+                let
+                  val (pat, exp) = Show.from_ty ty
+                in
+                  Node.create
+                    ( Efn [{pat = pat, exp = exp}]
+                    , Span.join left right
+                    )
+                end
+            | _ => raise Fail "invalid deriving exp"
           fun list_exp {left, exps, right} =
             Node.create (Elist exps, Span.join left right)
           fun nil_exp {left, right} =
