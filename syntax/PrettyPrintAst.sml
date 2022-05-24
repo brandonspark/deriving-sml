@@ -1,4 +1,4 @@
-(** Copyright (c) 2020 Sam Westrick
+(** Adapted from code by Sam Westrick
   *
   * See the file LICENSE for details.
   *)
@@ -59,14 +59,12 @@ struct
   (* if all is true: apply delim to all elements, including first.
    * delim is prepended to any mapped elements. *)
   fun apply_list_base f delim all l =
-    (case l of
+    case l of
       [] => []
     | first::rest =>
         (if all then text_syntax delim ++ f first else f first)
         ::
         List.map (fn elem => text_syntax delim ++ f elem) rest
-    )
-    handle Subscript => raise Fail "lol2"
 
   fun apply_list_after_base f delim l =
     List.foldr
@@ -641,8 +639,7 @@ struct
                       tl
                     )
             val fun_docs =
-              (show_list_mk mk_fun fvalbinds
-              ) handle Subscript => raise Fail "652"
+              show_list_mk mk_fun fvalbinds
           in
             group (fun_docs)
           end
@@ -652,7 +649,6 @@ struct
           let
             val datdecs =
               show_list_mk (show_datbind "datatype") datbinds
-              handle Susbcript => raise Fail "662"
           in
             case withtypee of
               NONE => datdecs
@@ -676,7 +672,7 @@ struct
           let
             val typdecs =
               show_list_mk (show_datbind "abstype") datbinds
-              handle Subscript => raise Fail "686"
+
             val withh =
               group (
                 text_syntax "with"
