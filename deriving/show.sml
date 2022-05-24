@@ -6,34 +6,32 @@ structure Show : DERIVING =
     infix |>
     fun x |> f = f x
 
-    val id_of_str = fn x => Node.create (Symbol.fromValue x, Span.absurd)
-    val x = id_of_str "x"
+    val x = mk_id "x"
 
     val new = TempId.new
 
-    fun map_sym sym f = Symbol.fromValue (f (Symbol.toValue sym))
-
-    fun change_last f l =
-      case l of
-        [] => raise Fail "changing last on empty list"
-      | [x] => [f x]
-      | x::xs =>
-          let
-            val res = change_last f xs
-          in
-            x::res
-          end
-
-    fun long_ty_to_show longid =
-      case longid of
-        [] => raise Fail "impossible, long_ty_to_show on empty id"
-      | _ =>
-          change_last
-            (fn node =>
-              Node.map (fn sym => map_sym sym (fn s => s ^ "_show")) node
-            )
-            longid
-
+    local
+      fun change_last f l =
+        case l of
+          [] => raise Fail "changing last on empty list"
+        | [x] => [f x]
+        | x::xs =>
+            let
+              val res = change_last f xs
+            in
+              x::res
+            end
+    in
+      fun long_ty_to_show longid =
+        case longid of
+          [] => raise Fail "impossible, long_ty_to_show on empty id"
+        | _ =>
+            change_last
+              (fn node =>
+                Node.map (fn sym => map_sym sym (fn s => s ^ "_show")) node
+              )
+              longid
+    end
 
     fun promote x = Node.create (x, Span.absurd)
 
@@ -48,131 +46,146 @@ structure Show : DERIVING =
       promote (old_eapp {left = left, right = right})
     val old_papp = Papp
     fun Papp x = promote (old_papp x)
-
-    infix ^^
-    fun x ^^ y =
-      Eapp { left = Eident [id_of_str "op^"]
-           , right = promote (Etuple [x, y])
-           }
+    val old_pconstr = Pconstr
+    fun Pconstr x = promote (old_pconstr {opp = false, id = [x]})
 
     val old_eif = Eif
     fun Eif x = promote (old_eif x)
     val old_efn = Efn
     fun Efn x = promote (old_efn x)
 
-
+    infix ^^
+    fun x ^^ y =
+      Eapp { left = Eident [mk_id "op^"]
+           , right = promote (Etuple [x, y])
+           }
 
     fun ty_to_code get_tyvar_fn ty ctx (type_name : identifier option) =
       (* type_name should be SOME tycon if we are doing this for a type alias
        * named tycon.
        * otherwise it should be NONE
        *)
-      (* TODO: add flag for recursion. should only be able to show_t if its
-       * `type`, should err. but for `datatype`, its ok
-       *)
       let
         val id = new ()
 
-        fun mk_toString id = Eident [id_of_str id, id_of_str "toString"]
+        fun mk_toString id = Eident [mk_id id, mk_id "toString"]
 
+        fun use_show longid id =
+          Eapp { left = Eident (long_ty_to_show longid)
+               , right = Eident [id]
+               }
       in
         case Node.getVal ty of
           Tident [ty_id] =>
             ( Pident id
-              (* Special cases for showing any base types.
+            , (* Special cases for showing any base types.
                *)
-            , case id_to_string ty_id of
-              "int" =>
-                Eapp { left = mk_toString "Int"
-                     , right = Eident [id]
-                     }
-            | "string" =>
-                (* Since this is producing source code, we have to account for
-                 * the backslashes needed to escape in the produced code.
-                 * So this is "one level up". This translates to:
-                 * \" ^ ... ^ \"
-                 *)
-                Estring "\\\"" ^^ Eident [id] ^^ Estring "\\\""
-            | "real" =>
-                Eapp { left = mk_toString "Real"
-                     , right = Eident [id]
-                     }
-            | "char" =>
-                Estring "#\\\""
-                ^^ Eapp { left = mk_toString "Char"
-                        , right = Eident [id]
-                        }
-                ^^ Estring "\\\""
-            | "bool" =>
-                Eif { exp1 = Eident [id]
-                    , exp2 = Estring "true"
-                    , exp3 = Estring "false"
+              case id_to_string ty_id of
+                "int" =>
+                  Eapp { left = mk_toString "Int"
+                       , right = Eident [id]
+                       }
+              | "string" =>
+                  (* Since this is producing source code, we have to account for
+                   * the backslashes needed to escape in the produced code.
+                   * So this is "one level up". This translates to:
+                   * \" ^ ... ^ \"
+                   *)
+                  Estring "\\\"" ^^ Eident [id] ^^ Estring "\\\""
+              | "real" =>
+                  Eapp { left = mk_toString "Real"
+                       , right = Eident [id]
+                       }
+              | "char" =>
+                  Estring "#\\\""
+               ^^ Eapp { left = mk_toString "Char"
+                       , right = Eident [id]
+                      }
+               ^^ Estring "\\\""
+              | "bool" =>
+                  Eif { exp1 = Eident [id]
+                      , exp2 = Estring "true"
+                      , exp3 = Estring "false"
+                      }
+              | "order" =>
+                  Ecase
+                    { exp = Eident [id]
+                    , matches =
+                        [ { pat = Pconstr (mk_id "LESS")
+                          , exp = Estring "LESS"
+                          }
+                        , { pat = Pconstr (mk_id "EQUAL")
+                          , exp = Estring "EQUAL"
+                          }
+                        , { pat = Pconstr (mk_id "GREATER")
+                          , exp = Estring "GREATER"
+                          }
+                        ]
                     }
-            | _ =>
-                (case type_name of
-                  SOME tycon =>
-                    if id_eq (ty_id, tycon) then
-                      raise Fail "type alias defined in terms of itself"
-                    else
-                      Eapp { left = Eident (long_ty_to_show [ty_id])
-                           , right = Eident [id]
-                           }
-                | NONE =>
-                    (* is it the same as the thing we're currently deriving? *)
-                    Eapp { left = Eident (long_ty_to_show [ty_id])
-                         , right = Eident [id]
-                         }
-                )
+                  |> promote
+              | _ =>
+                  (* Look for the corresponding show function.
+                   *)
+                  (case type_name of
+                    SOME tycon =>
+                      if id_eq (ty_id, tycon) then
+                        raise Fail "type alias defined in terms of itself"
+                      else
+                        use_show [ty_id] id
+                  | NONE =>
+                      use_show [ty_id] id
+                  )
             )
-        | Tident longty =>
-            ( Pident id
-            , Eapp { left = Eident (long_ty_to_show longty)
-                   , right = Eident [id]
-                   }
-            )
+
+        (* Just use the show function for a modular type.
+         *)
+        | Tident longty => (Pident id, use_show longty id)
+
+        (* Suppose we're codegen-ing for something like:
+         * 'a
+         * We don't know how to print an `'a`.
+         * But this codegen'd function simply assumes it's given such a
+         * polymorphic printing function, referred to as `fni`, for the
+         * tyvar's index.
+         * (if we were deriving on an ('a, 'b) t, this index would be 0)
+         *)
         | Ttyvar tyvar =>
-            (* Suppose we're codegen-ing for something like:
-             * 'a
-             * We don't know how to print an `'a`.
-             * But this codegen'd function simply assumes it's given such a
-             * polymorphic printing function, referred to as `fni`, for the
-             * tyvar's index.
-             * (if we were deriving on an ('a, 'b) t, this index would be 0)
-             *)
             ( Pident id
             , Eapp { left = get_tyvar_fn tyvar
                    , right = Eident [id]
                    }
             )
+
+        (* For polymorphic functions, get the right show function and pass it the
+         * show functions for the instantiated tyargs.
+         *)
         | Tapp (tys, longid) =>
             let
+              (* For a list of types, get all the corresponding functions to
+               * print them, and pass them to a desired expression.
+               *)
               val codegen_tys =
                 List.map
                   (fn ty => ty_to_code get_tyvar_fn ty ctx type_name)
                   tys
-
-              (* For a list of types, get all the corresponding functions to
-               * print them, and pass them to a desired expression.
-               *)
               fun add_printing_fns exp =
-                Eapp { left =
-                         List.foldl
-                          (fn ((pat, exp), acc) =>
-                            Eapp { left = acc
-                                 , right = Efn [{pat = pat, exp = exp}]
-                                 }
-                          )
-                          exp
-                          codegen_tys
+                Eapp { left = List.foldl
+                                (fn ((pat, exp), acc) =>
+                                  Eapp { left = acc
+                                       , right = Efn [{pat = pat, exp = exp}]
+                                       }
+                                )
+                                exp
+                                codegen_tys
                      , right = Eident [id]
                      }
 
             in
               ( Pident id
               , case longid of
+                  (* If it's not in a module, it may be `list` or `option`.
+                   *)
                   [sing_id] =>
-                    (* If it's not in a module, it may be `list` or `option`.
-                     *)
                     (case (codegen_tys, id_to_string sing_id) of
                       ([(pat, exp)], "list") =>
                         let
@@ -187,34 +200,31 @@ structure Show : DERIVING =
                         in
                           (* "[" ^ String.concatWith ", " (List.map f id) ^ "]"
                            *)
-                          Estring "["
+                             Estring "["
                           ^^ Eapp { left = comma_separate
-                                 , right =
-                                     Eapp { left = map_fn
-                                          , right = Eident [id]
-                                          }
-                                 }
-                          ^^  Estring "]"
+                                  , right =
+                                      Eapp { left = map_fn
+                                           , right = Eident [id]
+                                           }
+                                  }
+                          ^^ Estring "]"
                         end
                     | ([(pat, exp)], "option") =>
                         Ecase { exp = Eident [id]
                               , matches =
                                   [ (* NONE => "NONE" *)
-                                    { pat =
-                                        promote (Pconstr {opp = false, id = [mk_id "NONE"]})
+                                    { pat = Pconstr (mk_id "NONE")
                                     , exp = Estring "NONE"
                                     }
                                   , (* SOME x => "SOME " ^ f x *)
-                                    { pat =
-                                        Papp { id = [mk_id "SOME"]
-                                             , atpat = Pident (mk_id "x")
-                                             }
-                                    , exp =
-                                           Estring "SOME ("
-                                        ^^ Eapp { left = Efn [{pat = pat, exp = exp}]
-                                               , right = Eident [mk_id "x"]
-                                               }
-                                        ^^ Estring ")"
+                                    { pat = Papp { id = [mk_id "SOME"]
+                                                 , atpat = Pident (mk_id "x")
+                                                 }
+                                    , exp = Estring "SOME ("
+                                         ^^ Eapp { left = Efn [{pat = pat, exp = exp}]
+                                                 , right = Eident [mk_id "x"]
+                                                 }
+                                         ^^ Estring ")"
                                     }
                                   ]
                               }
@@ -224,10 +234,15 @@ structure Show : DERIVING =
                     | _ => add_printing_fns (Eident (long_ty_to_show longid))
                     )
                 | _ => add_printing_fns (Eident (long_ty_to_show longid))
-                (* TODO: special case list, option *)
               )
-
             end
+
+        (* Functions are unprintable. *)
+        | Tarrow (ty1, ty2) =>
+            (promote Pwild, Estring "<fn>")
+
+        (* For product types, codegen the components and combine.
+         *)
         | Tprod tys =>
             let
               val codegen_tys =
@@ -237,26 +252,30 @@ structure Show : DERIVING =
             in
               ( promote (Ptuple (List.map #1 codegen_tys))
               , List.foldl
-                  (fn ((_, exp), NONE) => SOME (Estring "(" ^^ exp)
+                  (fn ((_, exp), NONE) => SOME exp
                   | ((_, exp), SOME acc) =>
                     SOME (acc ^^ (Estring ", " ^^ exp))
                   )
                   NONE
                   codegen_tys
                 |> (fn NONE => raise Fail "empty product type in show"
-                   | SOME exp => exp ^^ Estring ")"
+                   | SOME exp => Estring "(" ^^ exp ^^ Estring ")"
                    )
               )
             end
-        | Tarrow (ty1, ty2) =>
-            (* Functions are unprintable. *)
-            (promote Pwild, Estring "<fn>")
+
+        (* For record types, codegen the components and combine.
+         *)
         | Trecord fields =>
             let
               val codegen_tys =
                 List.map
                   (fn {lab, ty} => (lab, ty_to_code get_tyvar_fn ty ctx type_name))
                   fields
+              fun mk_entry lab exp =
+                promote (old_estring (Node.getVal lab))
+                ^^ Estring " = "
+                ^^ exp
             in
               ( promote
                   ( Precord
@@ -267,25 +286,14 @@ structure Show : DERIVING =
                   )
               , List.foldl
                   (fn ((lab, (_, exp)), NONE) =>
-                      SOME (
-                        Estring "{"
-                        ^^ promote (old_estring (Node.getVal lab))
-                        ^^ Estring " = "
-                        ^^ exp
-                      )
+                      SOME (mk_entry lab exp)
                   | ((lab, (_, exp)), SOME acc) =>
-                       SOME (
-                         acc
-                      ^^ Estring ", "
-                      ^^ promote (old_estring (Node.getVal lab))
-                      ^^ Estring " = "
-                      ^^ exp
-                      )
+                      SOME (acc ^^ Estring ", " ^^ mk_entry lab exp)
                   )
                   NONE
                   codegen_tys
                 |> (fn NONE => raise Fail "empty trecord in show"
-                   | SOME exp => exp ^^ Estring "}")
+                   | SOME exp => Estring "{" ^^ exp ^^ Estring "}")
               )
             end
       end
@@ -314,7 +322,7 @@ structure Show : DERIVING =
          *)
         val fn_pats =
           List.map
-            (fn (idx, _) => Pident (id_of_str ("fn" ^ Int.toString idx)))
+            (fn (idx, _) => Pident (mk_id ("fn" ^ Int.toString idx)))
             enum_tyvars
       in
         (fn_pats, get_tyvar_fn)
@@ -332,8 +340,8 @@ structure Show : DERIVING =
         (Context.init)
         NONE
 
-
-
+    (* Check if a `deriving` actually has a `show`
+     *)
     fun verify_deriving deriving =
       case deriving of
         NONE => false
@@ -346,6 +354,8 @@ structure Show : DERIVING =
              | SOME (_, _::_) => raise Fail "show currently does not take options!"
              )
 
+    (* Makes the function declarations for the show functions.
+     *)
     fun mk_fundec mk_init id =
       let
         val s = id_to_string id
@@ -362,14 +372,6 @@ structure Show : DERIVING =
           ]
         ]
       end
-
-    fun finish_deriving fvalbinds =
-      case fvalbinds of
-        [] => []
-      | _ => [ Dfun { tyvars = []
-                  , fvalbinds = fvalbinds
-                  }
-             ]
 
     fun codegen_datbind {tyvars, tycon, conbinds, deriving} ctx =
       if not (verify_deriving deriving) then
@@ -393,8 +395,8 @@ structure Show : DERIVING =
               (* TODO: can do some optimizations here to make less excess parens
                * *)
             , exp = Estring (id_to_string conid ^ " (")
-                    ^^ exp
-                    ^^ Estring ")"
+                 ^^ exp
+                 ^^ Estring ")"
             }
 
           (* These are the actual cases for the principal argument of the
@@ -444,77 +446,84 @@ structure Show : DERIVING =
     fun add_init (init, ctx) x = (init::x, ctx)
 
     fun codegen_dec (dec, ctx) =
-      add_init (Node.getVal dec, ctx)
-      ( case Node.getVal dec of
-        Ddatdec { datbinds, withtypee } =>
-          (* Collect a list of all of the different function val binds, which
-           * will then be placed in a single `Dfun` to `and` them together.
-           *)
-          List.foldl
-            (fn (datbind, acc) =>
-              codegen_datbind datbind ctx @ acc
-            )
-            []
-            datbinds
-        |> (fn fvalbinds => finish_deriving fvalbinds
-              (*
-              (case withtypee of
-                ( NONE
-                | SOME typbinds ) =>
-              *)
-              (* TODO: I can't be arsed to add support for deriving withtypes.
-               * Just assume there's none for now.
-               *)
-            )
-      | Ddatrepl _ => [] (* TODO: add datrepl support *)
-      | Dtype typbinds =>
-          List.foldl
-            (fn ({tyvars, tycon, ty, deriving}, acc) =>
-              if not (verify_deriving deriving) then
-                []
-              else
-                let
-                  val (fn_pats, get_tyvar_fn) = tyvars_to_fns tyvars
-
-                  (* This is a typedec, so we do pass type_name as tycon.
-                   *)
-                  val (pat, exp) = ty_to_code get_tyvar_fn ty ctx (SOME tycon)
-
-                  (* The fvalbinds need to be made without going all the way to `Dfun`,
-                   * because they must be `and`ed together (in the same `Dfun`),
-                   * to support mutual recursion.
-                   *)
-                  fun mk_show_fvalbind id =
-                    [ { opp = false
-                      , id = id
-                      , pats = fn_pats @ [pat]
-                      , ty = NONE
-                      , exp = exp
+      let
+        fun finish_deriving fvalbinds =
+          case fvalbinds of
+            [] => []
+          | _ => [ Dfun { tyvars = []
+                      , fvalbinds = fvalbinds
                       }
-                    ]
-                in
-                  mk_fundec mk_show_fvalbind tycon
-                end
-            )
+                 ]
+      in
+        add_init (Node.getVal dec, ctx)
+        ( case Node.getVal dec of
+          Ddatdec { datbinds, withtypee } =>
+            (* Collect a list of all of the different function val binds, which
+             * will then be placed in a single `Dfun` to `and` them together.
+             *)
+            List.foldl
+              (fn (datbind, acc) => codegen_datbind datbind ctx @ acc)
+              []
+              datbinds
+          |> (fn fvalbinds => finish_deriving fvalbinds
+                (*
+                (case withtypee of
+                  ( NONE
+                  | SOME typbinds ) =>
+                *)
+                (* TODO: I can't be arsed to add support for deriving withtypes.
+                 * Just assume there's none for now.
+                 *)
+              )
+        | Ddatrepl _ => [] (* TODO: add datrepl support *)
+        | Dtype typbinds =>
+            List.foldl
+              (fn ({tyvars, tycon, ty, deriving}, acc) =>
+                if not (verify_deriving deriving) then
+                  []
+                else
+                  let
+                    val (fn_pats, get_tyvar_fn) = tyvars_to_fns tyvars
+
+                    (* This is a typedec, so we do pass type_name as tycon.
+                     *)
+                    val (pat, exp) = ty_to_code get_tyvar_fn ty ctx (SOME tycon)
+
+                    (* The fvalbinds need to be made without going all the way to `Dfun`,
+                     * because they must be `and`ed together (in the same `Dfun`),
+                     * to support mutual recursion.
+                     *)
+                    fun mk_show_fvalbind id =
+                      [ { opp = false
+                        , id = id
+                        , pats = fn_pats @ [pat]
+                        , ty = NONE
+                        , exp = exp
+                        }
+                      ]
+                  in
+                    mk_fundec mk_show_fvalbind tycon
+                  end
+              )
+              []
+              typbinds
+            |> finish_deriving
+        | Dabstype { datbinds, withtypee, withh } =>
+            (* TODO: I can't be assed to support abstype rn.
+             *)
             []
-            typbinds
-          |> ( fn fvalbinds => finish_deriving fvalbinds
-             )
-      | Dabstype { datbinds, withtypee, withh } =>
-          (* TODO: I can't be assed to support abstype rn.
-           *)
-          []
-      | ( Dval _
-        | Dfun _
-        | Dexception _
-        | Dlocal _
-        | Dopen _
-        | Dempty
-        | Dseq _
-        | Dinfix _
-        | Dinfixr _
-        | Dnonfix _ ) => []
-    )
+        | ( Dval _
+          | Dfun _
+          | Dexception _
+          | Dlocal _
+          | Dopen _
+          | Dempty
+          | Dseq _
+          | Dinfix _
+          | Dinfixr _
+          | Dnonfix _ ) => []
+        )
+      end
 
     val old_tident = Tident
     fun Tident x = promote (old_tident x)
@@ -526,77 +535,76 @@ structure Show : DERIVING =
     fun Tarrow x = promote (old_tarrow x)
 
     fun codegen_spec (spec, ctx) =
-      add_init (Node.getVal spec, ctx)
-      ( case Node.getVal spec of
-        SPtype {tyvars, tycon, ty = tyopt, deriving} =>
-          if not (verify_deriving deriving) then
+      let
+        fun mk_funspec tycon show_ty =
+          [ SPval { id = mk_id ("show_" ^ id_to_string tycon)
+                  , ty = show_ty
+                  }
+          , SPval { id = mk_id (id_to_string tycon ^ "_show")
+                  , ty = show_ty
+                  }
+          ]
+
+      in
+        add_init (Node.getVal spec, ctx)
+        ( case Node.getVal spec of
+          SPtype {tyvars, tycon, ty = tyopt, deriving} =>
+            if not (verify_deriving deriving) then
+              []
+            else
+              let
+                (* The type we're generating show for.
+                 *)
+                val self_ty =
+                  case tyvars of
+                    [] => Tident [tycon]
+                  | _ => Tapp (List.map Ttyvar tyvars, [tycon])
+
+                val show_ty = (Tarrow (self_ty, Tident [mk_id "string"]))
+              in
+                mk_funspec tycon show_ty
+              end
+        | SPdatdec {tyvars, tycon, condescs, deriving} =>
+            if not (verify_deriving deriving) then
+              []
+            else
+              let
+                (* The types of all of the helper functions, for a polymorphic
+                 * type.
+                 *)
+                val helper_tys =
+                  List.map
+                    (fn tyvar => Tarrow (Ttyvar tyvar, Tident [mk_id "string"]))
+                    tyvars
+
+                (* The type we're generating show for.
+                 *)
+                val self_ty =
+                  case tyvars of
+                    [] => Tident [tycon]
+                  | _ => Tapp (List.map Ttyvar tyvars, [tycon])
+
+                val show_ty =
+                  List.foldr
+                    (fn (ty, acc) => Tarrow (ty, acc))
+                    (Tarrow (self_ty, Tident [mk_id "string"]))
+                    helper_tys
+              in
+                mk_funspec tycon show_ty
+              end
+        | SPeqtype typdesc =>
+            (* TODO: I can't be assed to support eqtype rn.
+             *)
             []
-          else
-            let
-              (* The type we're generating show for.
-               *)
-              val self_ty =
-                case tyvars of
-                  [] => Tident [tycon]
-                | _ => Tapp (List.map Ttyvar tyvars, [tycon])
-
-              val show_ty =
-                (Tarrow (self_ty, Tident [mk_id "string"]))
-            in
-              [ SPval { id = mk_id ("show_" ^ id_to_string tycon)
-                      , ty = show_ty
-                      }
-              , SPval { id = mk_id (id_to_string tycon ^ "_show")
-                      , ty = show_ty
-                      }
-              ]
-            end
-      | SPdatdec {tyvars, tycon, condescs, deriving} =>
-          if not (verify_deriving deriving) then
+        | SPdatrepl _ =>
+            (* TODO: I can't be assed to support datrepl rn.
+             *)
             []
-          else
-            let
-              (* The types of all of the helper functions, for a polymorphic
-               * type.
-               *)
-              val helper_tys =
-                List.map
-                  (fn tyvar => Tarrow (Ttyvar tyvar, Tident [mk_id "string"]))
-                  tyvars
-
-              (* The type we're generating show for.
-               *)
-              val self_ty =
-                case tyvars of
-                  [] => Tident [tycon]
-                | _ => Tapp (List.map Ttyvar tyvars, [tycon])
-
-              val show_ty =
-                List.foldr
-                  (fn (ty, acc) => Tarrow (ty, acc))
-                  (Tarrow (self_ty, Tident [mk_id "string"]))
-                  helper_tys
-            in
-              [ SPval { id = mk_id ("show_" ^ id_to_string tycon)
-                      , ty = show_ty
-                      }
-              , SPval { id = mk_id (id_to_string tycon ^ "_show")
-                      , ty = show_ty
-                      }
-              ]
-            end
-      | SPeqtype typdesc =>
-          (* TODO: I can't be assed to support eqtype rn.
-           *)
-          []
-      | SPdatrepl _ =>
-          (* I can't be assed to support datrepl rn.
-           *)
-          []
-      | ( SPexception _
-        | SPmodule _
-        | SPinclude _
-        | SPsharing _
-        | SPval _ ) => []
-      )
+        | ( SPexception _
+          | SPmodule _
+          | SPinclude _
+          | SPsharing _
+          | SPval _ ) => []
+        )
+    end
   end

@@ -1,12 +1,7 @@
 Group
-  structure Popen
-
   structure Top
 is
   $/basis.cm
   ../parse/sources.cm
-
-  pipe.sml
-
   top.sml
 

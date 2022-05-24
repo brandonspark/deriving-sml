@@ -20,11 +20,20 @@ structure Top =
           val derived_filename = mk_derived_file ast filename
         in
           ( OS.Process.system ("sml " ^ derived_filename)
-          (* ; OS.Process.system ("rm " ^ derived_filename) *)
+          ; OS.Process.system ("rm " ^ derived_filename)
           ; OS.Process.exit 0
           )
         end
 
-
+    fun run () =
+      let
+        val args = CommandLine.arguments ()
+      in
+        case args of
+          [] => raise Fail "expected 1 argument"
+        | [filename] => derive_file filename
+        | _ => raise Fail "too many args, expected 1"
+      end
   end
 
+val _ = Top.run ()

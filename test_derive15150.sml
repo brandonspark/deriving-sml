@@ -33,7 +33,7 @@ structure Test =
                               ())) )) ( l )); 
          l)
     datatype simple1 = A | B (* [.deriving show] *)
-    fun show_simple1 t45 = (case t45 of A => "A" | B => "B")
+    fun show_simple1 t48 = (case t48 of A => "A" | B => "B")
     and simple1_show x = (show_simple1 ( x ))
     datatype const =
       Int of int
@@ -42,34 +42,34 @@ structure Test =
     | String of string
     | Bool of bool
     (* [.deriving show] *)
-    fun show_const t51 =
-        (case t51 of
-           (Int t46) =>
-             (op^ ( ((op^ ( ("Int (", (Int.toString ( t46 ))) )), 
+    fun show_const t54 =
+        (case t54 of
+           (Int t49) =>
+             (op^ ( ((op^ ( ("Int (", (Int.toString ( t49 ))) )), 
                      ")") ))
-         | (Real t47) =>
-             (op^ ( ((op^ ( ("Real (", (Real.toString ( t47 ))) )), 
+         | (Real t50) =>
+             (op^ ( ((op^ ( ("Real (", (Real.toString ( t50 ))) )), 
                      ")") ))
-         | (Char t48) =>
+         | (Char t51) =>
              (op^ ( ((op^ ( ("Char (", 
                              (op^ ( ((op^ ( ("#\"", 
-                                             (Char.toString ( t48 ))) )), 
+                                             (Char.toString ( t51 ))) )), 
                                      "\"") ))) )), 
                      ")") ))
-         | (String t49) =>
+         | (String t52) =>
              (op^ ( ((op^ ( ("String (", 
-                             (op^ ( ((op^ ( ("\"", t49) )), "\"") ))) )), 
+                             (op^ ( ((op^ ( ("\"", t52) )), "\"") ))) )), 
                      ")") ))
-         | (Bool t50) =>
+         | (Bool t53) =>
              (op^ ( ((op^ ( ("Bool (", 
-                             (if t50 then "true" else "false")) )), 
+                             (if t53 then "true" else "false")) )), 
                      ")") )))
     and const_show x = (show_const ( x ))
     datatype 'a poly = Poly of 'a  (* [.deriving show] *)
-    fun show_poly fn0 t53 =
-        (case t53 of
-           (Poly t52) =>
-             (op^ ( ((op^ ( ("Poly (", (fn0 ( t52 ))) )), ")") ))
+    fun show_poly fn0 t56 =
+        (case t56 of
+           (Poly t55) =>
+             (op^ ( ((op^ ( ("Poly (", (fn0 ( t55 ))) )), ")") ))
          )
     and poly_show x = (show_poly ( x ))
     datatype mono =
@@ -77,29 +77,29 @@ structure Test =
     | Mono2 of int option
     | Mono3 of int poly
     (* [.deriving show] *)
-    fun show_mono t60 =
-        (case t60 of
-           (Mono1 t54) =>
+    fun show_mono t63 =
+        (case t63 of
+           (Mono1 t57) =>
              (op^ ( ((op^ ( ("Mono1 (", 
                              (op^ ( ((op^ ( ("[", 
-                                             ((String.concatWith ( ", " )) ( ((List.map ( (fn t55 =>
-                                                                                                (Int.toString ( t55 ))) )) ( t54 )) ))) )), 
+                                             ((String.concatWith ( ", " )) ( ((List.map ( (fn t58 =>
+                                                                                                (Int.toString ( t58 ))) )) ( t57 )) ))) )), 
                                      "]") ))) )), 
                      ")") ))
-         | (Mono2 t56) =>
+         | (Mono2 t59) =>
              (op^ ( ((op^ ( ("Mono2 (", 
-                             (case t56 of
+                             (case t59 of
                                 NONE => "NONE"
                               | (SOME x) =>
                                   (op^ ( ((op^ ( ("SOME (", 
-                                                  ((fn t57 =>
-                                                         (Int.toString ( t57 ))) ( x ))) )), 
+                                                  ((fn t60 =>
+                                                         (Int.toString ( t60 ))) ( x ))) )), 
                                           ")") )))) )), 
                      ")") ))
-         | (Mono3 t58) =>
+         | (Mono3 t61) =>
              (op^ ( ((op^ ( ("Mono3 (", 
-                             ((poly_show ( (fn t59 =>
-                                                 (Int.toString ( t59 ))) )) ( t58 ))) )), 
+                             ((poly_show ( (fn t62 =>
+                                                 (Int.toString ( t62 ))) )) ( t61 ))) )), 
                      ")") )))
     and mono_show x = (show_mono ( x ))
     fun run_tests l =
@@ -126,146 +126,164 @@ structure Test =
                   (((fn t9 => (mono_show ( t9 ))) ( (Mono3 ( (Poly ( 150 )) )) )), 
                    "Mono3 (Poly (150))"), 
                   (((fn t10 =>
-                          ((poly_show ( (fn t11 =>
-                                              (Int.toString ( t11 ))) )) ( t10 ))) ( (Poly ( 150 )) )), 
+                          (case t10 of
+                             LESS => "LESS"
+                           | EQUAL => "EQUAL"
+                           | GREATER => "GREATER")) ( LESS )), 
+                   "LESS"), 
+                  (((fn t11 =>
+                          (case t11 of
+                             LESS => "LESS"
+                           | EQUAL => "EQUAL"
+                           | GREATER => "GREATER")) ( EQUAL )), 
+                   "EQUAL"), 
+                  (((fn t12 =>
+                          (case t12 of
+                             LESS => "LESS"
+                           | EQUAL => "EQUAL"
+                           | GREATER => "GREATER")) ( GREATER )), 
+                   "GREATER"), 
+                  (((fn t13 =>
+                          ((poly_show ( (fn t14 =>
+                                              (Int.toString ( t14 ))) )) ( t13 ))) ( (Poly ( 150 )) )), 
                    "Poly (150)"), 
-                  (((fn (t13, t14) =>
-                          (op^ ( ((op^ ( ((op^ ( ("(", 
-                                                  (if
-                                                   t13
-                                                   then
-                                                   "true"
-                                                   else "false")) )), 
-                                          (op^ ( (", ", 
-                                                  (Int.toString ( t14 ))) ))) )), 
-                                  ")") ))) ( (true, 150) )), 
-                   "(true, 150)"), 
-                  (((fn (t16, (t18, t19)) =>
-                          (op^ ( ((op^ ( ((op^ ( ("(", 
-                                                  (if
+                  (((fn (t16, t17) =>
+                          (op^ ( ((op^ ( ("(", 
+                                          (op^ ( ((if
                                                    t16
                                                    then
                                                    "true"
-                                                   else "false")) )), 
-                                          (op^ ( (", ", 
-                                                  (op^ ( ((op^ ( ((op^ ( ("(", 
-                                                                          (Int.toString ( t18 ))) )), 
-                                                                  (op^ ( (", ", 
-                                                                          (op^ ( ((op^ ( ("\"", 
-                                                                                          t19) )), 
-                                                                                  "\"") ))) ))) )), 
-                                                          ")") ))) ))) )), 
+                                                   else "false"), 
+                                                  (op^ ( (", ", 
+                                                          (Int.toString ( t17 ))) ))) ))) )), 
+                                  ")") ))) ( (true, 150) )), 
+                   "(true, 150)"), 
+                  (((fn (t19, (t21, t22)) =>
+                          (op^ ( ((op^ ( ("(", 
+                                          (op^ ( ((if
+                                                   t19
+                                                   then
+                                                   "true"
+                                                   else "false"), 
+                                                  (op^ ( (", ", 
+                                                          (op^ ( ((op^ ( ("(", 
+                                                                          (op^ ( ((Int.toString ( t21 )), 
+                                                                                  (op^ ( (", ", 
+                                                                                          (op^ ( ((op^ ( ("\"", 
+                                                                                                          t22) )), 
+                                                                                                  "\"") ))) ))) ))) )), 
+                                                                  ")") ))) ))) ))) )), 
                                   ")") ))) ( (true, 
                                               (150, "stan")) )), 
                    "(true, (150, \"stan\"))"), 
-                  (((fn ((t22, t23), t24) =>
-                          (op^ ( ((op^ ( ((op^ ( ("(", 
-                                                  (op^ ( ((op^ ( ((op^ ( ("(", 
-                                                                          (if
-                                                                           t22
+                  (((fn ((t25, t26), t27) =>
+                          (op^ ( ((op^ ( ("(", 
+                                          (op^ ( ((op^ ( ((op^ ( ("(", 
+                                                                  (op^ ( ((if
+                                                                           t25
                                                                            then
                                                                            "true"
                                                                            else
-                                                                           "false")) )), 
-                                                                  (op^ ( (", ", 
-                                                                          (Int.toString ( t23 ))) ))) )), 
-                                                          ")") ))) )), 
-                                          (op^ ( (", ", 
-                                                  (op^ ( ((op^ ( ("\"", 
-                                                                  t24) )), 
-                                                          "\"") ))) ))) )), 
+                                                                           "false"), 
+                                                                          (op^ ( (", ", 
+                                                                                  (Int.toString ( t26 ))) ))) ))) )), 
+                                                          ")") )), 
+                                                  (op^ ( (", ", 
+                                                          (op^ ( ((op^ ( ("\"", 
+                                                                          t27) )), 
+                                                                  "\"") ))) ))) ))) )), 
                                   ")") ))) ( ((true, 150), 
                                               "stan") )), 
                    "((true, 150), \"stan\")"), 
-                  (((fn {x = t26, y = t27} =>
-                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ("{", 
-                                                                                          "x") )), 
-                                                                                  " = ") )), 
-                                                                          (if
-                                                                           t26
-                                                                           then
-                                                                           "true"
-                                                                           else
-                                                                           "false")) )), 
-                                                                  ", ") )), 
-                                                          "y") )), 
-                                                  " = ") )), 
-                                          (Int.toString ( t27 ))) )), 
+                  (((fn {x = t29, y = t30} =>
+                          (op^ ( ((op^ ( ("{", 
+                                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ("x", 
+                                                                          " = ") )), 
+                                                                  (if
+                                                                   t29
+                                                                   then
+                                                                   "true"
+                                                                   else
+                                                                   "false")) )), 
+                                                          ", ") )), 
+                                                  (op^ ( ((op^ ( ("y", 
+                                                                  " = ") )), 
+                                                          (Int.toString ( t30 ))) ))) ))) )), 
                                   "}") ))) ( {x = true, y = 150} )), 
                    "{x = true, y = 150}"), 
-                  (((fn {x = t29, w = {y = t31, z = t32}} =>
-                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ("{", 
-                                                                                          "x") )), 
-                                                                                  " = ") )), 
-                                                                          (if
-                                                                           t29
-                                                                           then
-                                                                           "true"
-                                                                           else
-                                                                           "false")) )), 
-                                                                  ", ") )), 
-                                                          "w") )), 
-                                                  " = ") )), 
-                                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ("{", 
-                                                                                                          "y") )), 
-                                                                                                  " = ") )), 
-                                                                                          (Int.toString ( t31 ))) )), 
-                                                                                  ", ") )), 
-                                                                          "z") )), 
+                  (((fn {x = t32, w = {y = t34, z = t35}} =>
+                          (op^ ( ((op^ ( ("{", 
+                                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ("x", 
+                                                                          " = ") )), 
+                                                                  (if
+                                                                   t32
+                                                                   then
+                                                                   "true"
+                                                                   else
+                                                                   "false")) )), 
+                                                          ", ") )), 
+                                                  (op^ ( ((op^ ( ("w", 
                                                                   " = ") )), 
-                                                          (op^ ( ((op^ ( ("\"", 
-                                                                          t32) )), 
-                                                                  "\"") ))) )), 
-                                                  "}") ))) )), 
+                                                          (op^ ( ((op^ ( ("{", 
+                                                                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ("y", 
+                                                                                                          " = ") )), 
+                                                                                                  (Int.toString ( t34 ))) )), 
+                                                                                          ", ") )), 
+                                                                                  (op^ ( ((op^ ( ("z", 
+                                                                                                  " = ") )), 
+                                                                                          (op^ ( ((op^ ( ("\"", 
+                                                                                                          t35) )), 
+                                                                                                  "\"") ))) ))) ))) )), 
+                                                                  "}") ))) ))) ))) )), 
                                   "}") ))) ( {x = true, 
                                               w = {y = 150, 
                                                    z = "stan"}} )), 
                    "{x = true, w = {y = 150, z = \"stan\"}}"), 
-                  (((fn {w = {x = t35, y = t36}, z = t37} =>
-                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ("{", 
-                                                                                          "w") )), 
-                                                                                  " = ") )), 
-                                                                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ((op^ ( ("{", 
-                                                                                                                                          "x") )), 
-                                                                                                                                  " = ") )), 
-                                                                                                                          (if
-                                                                                                                           t35
-                                                                                                                           then
-                                                                                                                           "true"
-                                                                                                                           else
-                                                                                                                           "false")) )), 
-                                                                                                                  ", ") )), 
-                                                                                                          "y") )), 
-                                                                                                  " = ") )), 
-                                                                                          (Int.toString ( t36 ))) )), 
-                                                                                  "}") ))) )), 
-                                                                  ", ") )), 
-                                                          "z") )), 
-                                                  " = ") )), 
-                                          (op^ ( ((op^ ( ("\"", 
-                                                          t37) )), 
-                                                  "\"") ))) )), 
+                  (((fn {w = {x = t38, y = t39}, z = t40} =>
+                          (op^ ( ((op^ ( ("{", 
+                                          (op^ ( ((op^ ( ((op^ ( ((op^ ( ("w", 
+                                                                          " = ") )), 
+                                                                  (op^ ( ((op^ ( ("{", 
+                                                                                  (op^ ( ((op^ ( ((op^ ( ((op^ ( ("x", 
+                                                                                                                  " = ") )), 
+                                                                                                          (if
+                                                                                                           t38
+                                                                                                           then
+                                                                                                           "true"
+                                                                                                           else
+                                                                                                           "false")) )), 
+                                                                                                  ", ") )), 
+                                                                                          (op^ ( ((op^ ( ("y", 
+                                                                                                          " = ") )), 
+                                                                                                  (Int.toString ( t39 ))) ))) ))) )), 
+                                                                          "}") ))) )), 
+                                                          ", ") )), 
+                                                  (op^ ( ((op^ ( ("z", 
+                                                                  " = ") )), 
+                                                          (op^ ( ((op^ ( ("\"", 
+                                                                          t40) )), 
+                                                                  "\"") ))) ))) ))) )), 
                                   "}") ))) ( {w = {x = true, 
                                                    y = 150}, 
                                               z = "stan"} )), 
                    "{w = {x = true, y = 150}, z = \"stan\"}"), 
-                  (((fn t38 =>
-                          (case t38 of
+                  (((fn t41 =>
+                          (case t41 of
                              NONE => "NONE"
                            | (SOME x) =>
                                (op^ ( ((op^ ( ("SOME (", 
-                                               ((fn (t40, t41) =>
-                                                      (op^ ( ((op^ ( ((op^ ( ("(", 
-                                                                              (Int.toString ( t40 ))) )), 
-                                                                      (op^ ( (", ", 
-                                                                              (Int.toString ( t41 ))) ))) )), 
+                                               ((fn (t43, t44) =>
+                                                      (op^ ( ((op^ ( ("(", 
+                                                                      (op^ ( ((Int.toString ( t43 )), 
+                                                                              (op^ ( (", ", 
+                                                                                      (Int.toString ( t44 ))) ))) ))) )), 
                                                               ")") ))) ( x ))) )), 
                                        ")") )))) ( (SOME ( (1, 
                                                             50) )) )), 
                    "SOME ((1, 50))"), 
                   (((fn _ => "<fn>") ( (fn x => x) )), "<fn>"), 
-                  (((fn t43 =>
-                          (case t43 of
+                  (((fn t46 =>
+                          (case t46 of
                              NONE => "NONE"
                            | (SOME x) =>
                                (op^ ( ((op^ ( ("SOME (", 

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+f(){
+  exec rlwrap sml ./parse/sources.cm ./top/top.sml "$@"
+  unset -f f;
+}
+
+f $@
