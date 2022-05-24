@@ -35,7 +35,7 @@ function main : t =
   (seq "~0x" (+ hexadecimal)) => hex_number
 
   (or
-    (seq digit '. (+ digit))
+    (seq (+ digit) '. (+ digit))
     (seq (+ digit) (or 'e 'E) (+ digit))
     (seq digit '. (+ digit) (or 'e 'E) (+ digit))
   ) => reallit

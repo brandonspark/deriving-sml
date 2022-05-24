@@ -19,8 +19,8 @@ sig
   val softspace: doc
   val group: doc -> doc
 
-  val pretty: {ribbonFrac: real, maxWidth: int} -> doc -> string
-  val toString: doc -> string
+  val pretty: bool -> {ribbonFrac: real, maxWidth: int} -> doc -> string
+  val toString: bool -> doc -> string
 end =
 struct
 
@@ -124,7 +124,7 @@ struct
     CharVector.tabulate (count, fn _ => #" ")
 
 
-  fun pretty {ribbonFrac, maxWidth} inputDoc =
+  fun pretty b {ribbonFrac, maxWidth} inputDoc =
     let
       val ribbonWidth =
         Int.max (0, Int.min (maxWidth,
@@ -141,7 +141,11 @@ struct
         | Text (str, color) =>
             ( lnStart
             , col + String.size str
-            , TC.foreground color ^ str ^ TC.reset :: acc)
+            , if b then
+                TC.foreground color ^ str ^ TC.reset :: acc
+              else
+                str :: acc
+            )
         | Beside (doc1, doc2) =>
             layout (layout (lnStart, col, acc) doc1) doc2
         | Above (_, doc1, doc2) =>
@@ -168,6 +172,6 @@ struct
     end
 
 
-  val toString = pretty {ribbonFrac = 0.5, maxWidth = 120}
+  fun toString b t = pretty b {ribbonFrac = 0.5, maxWidth = 120} t
 
 end

@@ -87,15 +87,22 @@ structure Show : DERIVING =
                      , right = Eident [id]
                      }
             | "string" =>
-                Eident [id]
+                (* Since this is producing source code, we have to account for
+                 * the backslashes needed to escape in the produced code.
+                 * So this is "one level up". This translates to:
+                 * \" ^ ... ^ \"
+                 *)
+                Estring "\\\"" ^^ Eident [id] ^^ Estring "\\\""
             | "real" =>
                 Eapp { left = mk_toString "Real"
                      , right = Eident [id]
                      }
             | "char" =>
-                Eapp { left = mk_toString "Char"
-                     , right = Eident [id]
-                     }
+                Estring "#\\\""
+                ^^ Eapp { left = mk_toString "Char"
+                        , right = Eident [id]
+                        }
+                ^^ Estring "\\\""
             | "bool" =>
                 Eif { exp1 = Eident [id]
                     , exp2 = Estring "true"
@@ -148,16 +155,16 @@ structure Show : DERIVING =
                * print them, and pass them to a desired expression.
                *)
               fun add_printing_fns exp =
-                Eapp { left = exp
-                     , right =
-                       List.foldl
-                        (fn ((pat, exp), acc) =>
-                          Eapp { left = acc
-                               , right = Efn [{pat = pat, exp = exp}]
-                               }
-                        )
-                        (Eident [id])
-                        codegen_tys
+                Eapp { left =
+                         List.foldl
+                          (fn ((pat, exp), acc) =>
+                            Eapp { left = acc
+                                 , right = Efn [{pat = pat, exp = exp}]
+                                 }
+                          )
+                          exp
+                          codegen_tys
+                     , right = Eident [id]
                      }
 
             in
@@ -203,10 +210,11 @@ structure Show : DERIVING =
                                              , atpat = Pident (mk_id "x")
                                              }
                                     , exp =
-                                           Estring "SOME "
+                                           Estring "SOME ("
                                         ^^ Eapp { left = Efn [{pat = pat, exp = exp}]
                                                , right = Eident [mk_id "x"]
                                                }
+                                        ^^ Estring ")"
                                     }
                                   ]
                               }
@@ -229,12 +237,15 @@ structure Show : DERIVING =
             in
               ( promote (Ptuple (List.map #1 codegen_tys))
               , List.foldl
-                  (fn ((_, exp), acc) =>
-                    acc ^^ (Estring ", " ^^ exp)
+                  (fn ((_, exp), NONE) => SOME (Estring "(" ^^ exp)
+                  | ((_, exp), SOME acc) =>
+                    SOME (acc ^^ (Estring ", " ^^ exp))
                   )
-                  (Estring "(")
+                  NONE
                   codegen_tys
-                |> (fn exp => exp ^^ Estring ")")
+                |> (fn NONE => raise Fail "empty product type in show"
+                   | SOME exp => exp ^^ Estring ")"
+                   )
               )
             end
         | Tarrow (ty1, ty2) =>
@@ -255,16 +266,26 @@ structure Show : DERIVING =
                       )
                   )
               , List.foldl
-                  (fn ((lab, (_, exp)), acc) =>
-                       acc
-                    ^^ Estring ", "
-                    ^^ promote (old_estring (Node.getVal lab))
-                    ^^ Estring " = "
-                    ^^ exp
+                  (fn ((lab, (_, exp)), NONE) =>
+                      SOME (
+                        Estring "{"
+                        ^^ promote (old_estring (Node.getVal lab))
+                        ^^ Estring " = "
+                        ^^ exp
+                      )
+                  | ((lab, (_, exp)), SOME acc) =>
+                       SOME (
+                         acc
+                      ^^ Estring ", "
+                      ^^ promote (old_estring (Node.getVal lab))
+                      ^^ Estring " = "
+                      ^^ exp
+                      )
                   )
-                  (Estring "{")
+                  NONE
                   codegen_tys
-                |> (fn exp => exp ^^ Estring "}")
+                |> (fn NONE => raise Fail "empty trecord in show"
+                   | SOME exp => exp ^^ Estring "}")
               )
             end
       end
@@ -342,6 +363,14 @@ structure Show : DERIVING =
         ]
       end
 
+    fun finish_deriving fvalbinds =
+      case fvalbinds of
+        [] => []
+      | _ => [ Dfun { tyvars = []
+                  , fvalbinds = fvalbinds
+                  }
+             ]
+
     fun codegen_datbind {tyvars, tycon, conbinds, deriving} ctx =
       if not (verify_deriving deriving) then
         []
@@ -361,8 +390,11 @@ structure Show : DERIVING =
             { pat = Papp { id = [conid]
                          , atpat = pat
                          }
-            , exp = Estring (id_to_string conid ^ " ")
+              (* TODO: can do some optimizations here to make less excess parens
+               * *)
+            , exp = Estring (id_to_string conid ^ " (")
                     ^^ exp
+                    ^^ Estring ")"
             }
 
           (* These are the actual cases for the principal argument of the
@@ -424,7 +456,7 @@ structure Show : DERIVING =
             )
             []
             datbinds
-        |> (fn fvalbinds =>
+        |> (fn fvalbinds => finish_deriving fvalbinds
               (*
               (case withtypee of
                 ( NONE
@@ -433,10 +465,6 @@ structure Show : DERIVING =
               (* TODO: I can't be arsed to add support for deriving withtypes.
                * Just assume there's none for now.
                *)
-              [ Dfun { tyvars = []
-                   , fvalbinds = fvalbinds
-                   }
-              ]
             )
       | Ddatrepl _ => [] (* TODO: add datrepl support *)
       | Dtype typbinds =>
@@ -470,11 +498,7 @@ structure Show : DERIVING =
             )
             []
             typbinds
-          |> ( fn fvalbinds =>
-               [ Dfun { tyvars = []
-                      , fvalbinds = fvalbinds
-                      }
-               ]
+          |> ( fn fvalbinds => finish_deriving fvalbinds
              )
       | Dabstype { datbinds, withtypee, withh } =>
           (* TODO: I can't be assed to support abstype rn.
@@ -519,7 +543,7 @@ structure Show : DERIVING =
               val show_ty =
                 (Tarrow (self_ty, Tident [mk_id "string"]))
             in
-              [ SPval { id = mk_id ("show_ " ^ id_to_string tycon)
+              [ SPval { id = mk_id ("show_" ^ id_to_string tycon)
                       , ty = show_ty
                       }
               , SPval { id = mk_id (id_to_string tycon ^ "_show")
@@ -553,7 +577,7 @@ structure Show : DERIVING =
                   (Tarrow (self_ty, Tident [mk_id "string"]))
                   helper_tys
             in
-              [ SPval { id = mk_id ("show_ " ^ id_to_string tycon)
+              [ SPval { id = mk_id ("show_" ^ id_to_string tycon)
                       , ty = show_ty
                       }
               , SPval { id = mk_id (id_to_string tycon ^ "_show")

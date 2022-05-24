@@ -275,9 +275,27 @@ structure Lexer :> LEXER =
 
         fun enter_string ({len, follow, self, ...}: info) (k as LEX cont) pos =
           let
+            (* Suppose you have something like this:
+             * "  \"   a \"  "
+             * This will get parsed by #string into a list which looks like:
+             * [ #"\"" #"a", #"\"" ]
+             *
+             * The backslashes don't get parsed!
+             *)
             val (chars, follow', pos') = #string self follow (pos + len) []
+
+            val correct =
+              String.implode
+                ( List.concatMap
+                    (fn #"\"" => [#"\\", #"\""]
+                    | #"\n" => [#"\\", #"n"]
+                    (* TODO: fix other special characters? *)
+                    | other => [other]
+                    )
+                    (List.rev chars)
+                )
           in
-            Cons (STRING (Node.create (String.implode (rev chars), (pos, pos'))),
+            Cons (STRING (Node.create (correct, (pos, pos'))),
                   lazy (fn () => cont follow' k pos'))
           end
 

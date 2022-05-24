@@ -66,9 +66,24 @@ structure Transform : TRANSFORM =
         | DMstruct mods =>
             List.foldl
               (fn ({id, seal, module}, (mods, ctx)) =>
-                transform_module ctx module
-                |> Pair.map_fst
-                    (fn module => {id=id, seal=seal, module=module}::mods)
+                let
+                  val (seal, ctx) =
+                    case seal of
+                      NONE => (NONE, ctx)
+                    | SOME { opacity, signat } =>
+                        transform_signat ctx signat
+                        |> Pair.map_fst
+                            (fn signat =>
+                              SOME
+                                { opacity = opacity
+                                , signat = signat
+                                }
+                            )
+                in
+                  transform_module ctx module
+                  |> Pair.map_fst
+                      (fn module => {id=id, seal=seal, module=module}::mods)
+                end
               )
               ([], ctx)
               mods
@@ -461,7 +476,7 @@ structure Transform : TRANSFORM =
             let
               val (exp1, ctx) = transform_exp ctx exp1
               val (exp2, ctx) = transform_exp ctx exp2
-              val (exp2, ctx) = transform_exp ctx exp3
+              val (exp3, ctx) = transform_exp ctx exp3
             in
               ({exp1=exp1, exp2=exp2, exp3=exp3}, ctx)
               |> expand_node_with_ctx Eif exp
@@ -645,11 +660,17 @@ structure Transform : TRANSFORM =
             end
         | Pident {opp=false, id} =>
             (case Context.lookup_infix (id_to_string id) ctx of
-              SOME _ => raise Fail "pattern ident is infix"
+              (* NOTE: An infix Pident is being applied prefix.
+               * For now, allow it.
+               *)
+              SOME _ => (pat, ctx)
             | _ => (pat, ctx))
         | Pconstr {opp=false, id} =>
             (case Context.lookup_infix (longid_to_string id) ctx of
-              SOME _ => raise Fail "pattern constr is infix"
+              (* NOTE: An infix Pconstr is being applied prefix.
+               * For now, allow it.
+               *)
+              SOME _ => (pat, ctx)
             | _ => (pat, ctx))
         | ( Pnumber _
           | Pword _

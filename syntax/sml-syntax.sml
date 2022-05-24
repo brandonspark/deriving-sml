@@ -389,6 +389,7 @@ signature SMLSYNTAX =
     val id_eq : identifier * identifier -> bool
     val longid_to_string : longid -> string
     val juxta_span : ('a list -> 'b) -> 'a juxta list -> 'b
+    val map_sym : symbol -> (string -> string) -> symbol
 
     (* DERIVING *)
     type setting = identifier * identifier
@@ -474,6 +475,8 @@ structure SMLSyntax : SMLSYNTAX =
         (List.map (Symbol.toValue o Node.getVal) id)
     fun juxta_span list_span juxtas =
       list_span (List.map (fn Jident (_, a) => a | Jatom a => a) juxtas)
+    fun map_sym sym f =
+      Symbol.fromValue (f (Symbol.toValue sym))
 
     (* DERIVING *)
     type setting = PreSMLSyntax.setting

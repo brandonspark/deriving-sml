@@ -5,9 +5,7 @@
 
 structure PrettyPrintAst :
 sig
-  val pretty: SMLSyntax.ast -> string
-
-  val pretty_pat : SMLSyntax.pat -> string
+  val pretty: SMLSyntax.ast -> bool -> string
 end =
 struct
 
@@ -61,21 +59,22 @@ struct
   (* if all is true: apply delim to all elements, including first.
    * delim is prepended to any mapped elements. *)
   fun apply_list_base f delim all l =
-    case l of
+    (case l of
       [] => []
     | first::rest =>
         (if all then text_syntax delim ++ f first else f first)
         ::
         List.map (fn elem => text_syntax delim ++ f elem) rest
+    )
+    handle Subscript => raise Fail "lol2"
 
   fun apply_list_after_base f delim l =
-    case l of
-      [] => []
-    | _ =>
-      List.map (fn elem => f elem ++ text_syntax delim) (ListUtils.up_to_last l)
-      @ [f (ListUtils.last l)]
-      (* Yeah, I know. *)
-
+    List.foldr
+      (fn (elem, []) => [f elem]
+      | (elem, acc) => (f elem ++ text_syntax delim) :: acc
+      )
+      []
+      l
 
   (* Put the list of documents together in the right order. *)
   fun combine_list space smush [] = text_syntax ""
@@ -109,7 +108,7 @@ struct
         group (List.foldr op// (f (ListUtils.last l)) prelude_mapped)
       end
 
-  (* Suppose we have a list L : 'a list.
+  (* Suppose we have a nonempty list L : 'a list.
    * Suppose we also have a function mk : 'a -> bool -> doc.
    * Then we want to $$ all of the elements in the list together, where
    * `mk true` is applied to the first element, and `mk false` is applied to the
@@ -119,6 +118,7 @@ struct
     List.foldl op$$<
       (mk true (List.nth (l, 0)))
       (List.map (mk false) (List.drop (l, 1)))
+
 
   (* Suppose we would like to show all the elements in a list with some
    * delimiter, in such a way that the first element is prepended with one
@@ -150,10 +150,13 @@ struct
               show_symbol_node orange elem)
           longid
     in
-      List.foldl
-        (fn (elem, acc) => acc ++ text_syntax "." ++ elem)
-        (List.nth (mapped, 0))
-        (List.drop (mapped, 1))
+      case mapped of
+        [] => raise Fail "empty longid"
+      | hd::tl =>
+          List.foldl
+            (fn (elem, acc) => acc ++ text_syntax "." ++ elem)
+            hd
+            tl
     end
 
   fun show_juxta show_fn juxta =
@@ -199,11 +202,11 @@ struct
       NONE => text white ""
     | SOME plugins =>
       group (
-        text_syntax "[" ++ text pink ".deriving"
+        text_syntax "(* [" ++ text pink ".deriving"
         $$
         show_plugins plugins
         ++
-        text_syntax "]"
+        text_syntax "] *)"
       )
 
   local
@@ -268,7 +271,6 @@ struct
     val text = text color
   in
     fun show_pat pat = show_pat_ (Node.getVal pat)
-    and pretty_pat pat = PrettySimpleDoc.toString (show_pat pat)
     and show_pat_ pat_ =
       case pat_ of
         Pnumber n => text_literal (Int.toString n)
@@ -325,7 +327,7 @@ struct
               , SOME (show_pat aspat) ]
           )
       | Pjuxta pats =>
-          text_syntax "(" ++ show_list (show_juxta show_pat) " " pats ++ text_syntax ")"
+          raise Fail "there should not be pjuxtas"
 
     and show_patrow patrow =
       case patrow of
@@ -420,7 +422,7 @@ struct
           )
       | Eapp {left, right} =>
           parensAround (
-            show_exp left +-+ show_exp right
+            show_exp left +-+ text "(" +-+ show_exp right +-+ text ")"
           )
       | Etyped {exp, ty} =>
           parensAround (
@@ -481,41 +483,44 @@ struct
             )
           )
       | Ecase {exp, matches} =>
-          group (
-            parensAround (
-              group(
-                text_syntax "case"
-                $$
-                show_exp exp
-                $$
-                text_syntax "of"
+          (case matches of
+            [] => raise Fail "empty matches in Ecase"
+          | hd::tl =>
+              group (
+                parensAround (
+                  group(
+                    text_syntax "case"
+                    $$
+                    show_exp exp
+                    $$
+                    text_syntax "of"
+                  )
+                  $$
+                  spaces 2 ++ show_match hd
+                  $$
+                  show_list_base false show_match "| " true true tl
+                )
               )
-              $$
-              spaces 2 ++ show_match (List.nth (matches, 0))
-              $$
-              show_list_base false show_match "| " true true (List.drop (matches, 1))
-            )
           )
       | Efn matches =>
           let
             val inner = group (text_syntax "fn" +-+ show_match (List.nth (matches, 0)))
           in
-            group (
-              parensAround (
-                if List.length matches = 1 then
-                  inner
-                else
-                inner $$
-                space ++ show_list_base false show_match "| " true true (List.drop (matches, 1))
-              )
-            )
+            case matches of
+              [] => raise Fail "empty matches in fn"
+            | hd::tl =>
+                group (
+                  parensAround (
+                    if List.length matches = 1 then
+                      inner
+                    else
+                    inner $$
+                    space ++ show_list_base false show_match "| " true true tl
+                  )
+                )
           end
       | Ejuxta exps =>
-          group (
-            parensAround (
-              show_list (show_juxta show_exp) " " exps
-            )
-          )
+          raise Fail "should not be ejuxtas"
       end
 
     and show_match {pat, exp} =
@@ -573,33 +578,41 @@ struct
             ]
 
         fun show_datbind str mark {tyvars, tycon, conbinds, deriving} =
-          group (
-            separateWithSpaces
-              [ SOME (text (if mark then str else "and"))
-              , show_tyvars_option tyvars
-              , SOME (show_id tycon)
-              , SOME (text_syntax "=") ]
-            $$
-            (spaces 2 ++ (show_conbind (List.nth (conbinds, 0))))
-            $$
-            show_list_prepend color false "|" "|" show_conbind "" (List.drop (conbinds, 1))
-            $$
-            show_deriving deriving
-          )
+          case conbinds of
+            [] => raise Fail "empty conbinds in datbind"
+          | hd::tl =>
+              group (
+                separateWithSpaces
+                  [ SOME (text (if mark then str else "and"))
+                  , show_tyvars_option tyvars
+                  , SOME (show_id tycon)
+                  , SOME (text_syntax "=") ]
+                $$
+                (spaces 2 ++ (show_conbind hd))
+                $$
+                show_list_prepend color false "|" "|" show_conbind "" tl
+                $$
+                show_deriving deriving
+              )
       in
       case dec_ of
         Dval {recc, tyvars, valbinds} =>
-          List.foldr op$$<
-          (group (
-            separateWithSpaces
-              [ SOME (text "val")
-              , show_tyvars_option tyvars
-              , bool_to_option recc (text_rec "rec")
-              , SOME (show_match_equal (List.nth (valbinds, 0))) ]
-          ))
-          (List.map
-            (fn match => text "and" +-+ show_match_equal match)
-            (List.drop (valbinds, 1)))
+          (case valbinds of
+            [] => raise Fail "empty valbinds"
+          | hd::tl =>
+              List.foldr op$$<
+              (group (
+                separateWithSpaces
+                  [ SOME (text "val")
+                  , show_tyvars_option tyvars
+                  , bool_to_option recc (text_rec "rec")
+                  , SOME (show_match_equal hd) ]
+              ))
+              (List.map
+                (fn match => text "and" +-+ show_match_equal match)
+                tl
+              )
+          )
       | Dfun {tyvars, fvalbinds} =>
           let
             fun mk { opp, id, pats, ty, exp } =
@@ -614,18 +627,22 @@ struct
                 show_exp exp
               )
             fun mk_fun mark clauses =
-                List.foldr op$$<
-                  (group (
-                    text (if mark then "fun" else "and")
-                    +-+
-                    mk (List.nth (clauses, 0))
-                  ))
-                  (List.map
-                    (fn elem => spaces 2 ++ text_syntax "|" +-+ mk elem)
-                    (List.drop (clauses, 1))
-                  )
+              case clauses of
+                [] => raise Fail "empty clauses in fvalbind"
+              | hd::tl =>
+                  List.foldr op$$<
+                    (group (
+                      text (if mark then "fun" else "and")
+                      +-+
+                      mk hd
+                    ))
+                    (List.map
+                      (fn elem => spaces 2 ++ text_syntax "|" +-+ mk elem)
+                      tl
+                    )
             val fun_docs =
-              show_list_mk mk_fun fvalbinds
+              (show_list_mk mk_fun fvalbinds
+              ) handle Subscript => raise Fail "652"
           in
             group (fun_docs)
           end
@@ -635,6 +652,7 @@ struct
           let
             val datdecs =
               show_list_mk (show_datbind "datatype") datbinds
+              handle Susbcript => raise Fail "662"
           in
             case withtypee of
               NONE => datdecs
@@ -658,6 +676,7 @@ struct
           let
             val typdecs =
               show_list_mk (show_datbind "abstype") datbinds
+              handle Subscript => raise Fail "686"
             val withh =
               group (
                 text_syntax "with"
@@ -861,19 +880,22 @@ struct
             ]
 
         fun show_datbind str mark {tyvars, tycon, conbinds, deriving} =
-          group (
-            separateWithSpaces
-              [ SOME (text (if mark then str else "and"))
-              , show_tyvars_option tyvars
-              , SOME (show_id tycon)
-              , SOME (text_syntax "=") ]
-            $$
-            (spaces 2 ++ (show_conbind (List.nth (conbinds, 0))))
-            $$
-            show_list_prepend color false "|" "|" show_conbind "" (List.drop (conbinds, 1))
-            $$
-            show_deriving deriving
-          )
+          case conbinds of
+            [] => raise Fail "empty conbinds"
+          | hd::tl =>
+              group (
+                separateWithSpaces
+                  [ SOME (text (if mark then str else "and"))
+                  , show_tyvars_option tyvars
+                  , SOME (show_id tycon)
+                  , SOME (text_syntax "=") ]
+                $$
+                (spaces 2 ++ (show_conbind (hd)))
+                $$
+                show_list_prepend color false "|" "|" show_conbind "" tl
+                $$
+                show_deriving deriving
+              )
       in
       case spec_ of
         SPval {id, ty} =>
@@ -886,9 +908,19 @@ struct
             spaces 2 ++ show_ty ty
           )
       | SPtype typdesc =>
-          show_typdesc typdesc
+          group (
+            separateWithSpaces
+              [ SOME (text "type")
+              , SOME (show_typdesc typdesc)
+              ]
+          )
       | SPeqtype typdesc =>
-          show_typdesc typdesc
+          group (
+            separateWithSpaces
+              [ SOME (text "type")
+              , SOME (show_typdesc typdesc)
+              ]
+          )
       | SPdatdec {tyvars, tycon, condescs, deriving} =>
           let
             fun mk {tyvars, tycon, condescs} =
@@ -1009,6 +1041,6 @@ struct
       show_list_base false show_topdec "" false true ast
   end
 
-  fun pretty ast = PrettySimpleDoc.toString (show_ast ast)
+  fun pretty ast b = PrettySimpleDoc.toString b (show_ast ast)
 
 end

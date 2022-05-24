@@ -6,7 +6,7 @@ type t = int * string [.deriving show]
  *   "(" ^ Int.toString t1 ^ ", " ^ Int.toString t2 ^ ")"
  *)
 
-type t = t * t [.deriving show] (* should fail *)
+(* type t = t * t [.deriving show] should fail *)
 
 datatype t = Base | Recur of int * t [.deriving show] (* should work *)
 
@@ -16,3 +16,4 @@ datatype t = Base | Recur of int * t [.deriving show] (* should work *)
  *  case t of
  *    Base =>
  *  | Recur (t1, t2) => "Recur" ^
+ *)

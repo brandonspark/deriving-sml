@@ -154,7 +154,13 @@ structure Context :> CONTEXT =
 
                   ("::", Right, 5),
                   ("=", Left, 4),
-                  (":=", Left, 3) ]
+                  (":=", Left, 3),
+
+                  (* This wasn't in the Definition, but c.f.
+                   * https://home.cse.ust.hk/~dekai/3031/lectures/sml/h.sml.pdf
+                   *)
+                  ("^", Left, 6)
+                  ]
       val init =
         basis
         |> List.map (fn (name, assoc, precedence) => (name, {assoc=assoc, precedence=precedence}))

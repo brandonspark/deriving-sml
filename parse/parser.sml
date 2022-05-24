@@ -1029,10 +1029,10 @@ structure Parser :> PARSER =
     fun parse_file_to_string s =
       case parse_file s of
         Either.INL _ => raise Fail "Failed to parse!"
-      | Either.INR (ast, _) => PrettyPrintAst.pretty ast
+      | Either.INR (ast, _) => PrettyPrintAst.pretty ast true
 
     fun parse_file_transformed_to_string s =
       case parse_file s of
         Either.INL _ => raise Fail "Failed to parse!"
-      | Either.INR (ast, _) => PrettyPrintAst.pretty (Transform.transform ast)
+      | Either.INR (ast, _) => PrettyPrintAst.pretty (Transform.transform ast) true
   end

@@ -13,8 +13,9 @@ signature PRECEDENCE_ARG =
       type t = t_ Node.t
 
       val apply : t -> t -> t
-      val applyCurriedInfix : t -> t -> t -> t  (* infix operator first *)
-      val applyTupledInfix : t -> t -> t -> t   (* infix operator first *)
+      (* val applyCurriedInfix : t -> t -> t -> t  (* infix operator first *)
+                                                    *)
+      val applyTupledInfix : SMLSyntax.identifier -> t -> t -> t   (* infix operator first *)
    end
 
 
@@ -33,11 +34,13 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
       type span = Span.span
 
       datatype elem =
-         Oper of t * int * assoc * span
+         Oper of SMLSyntax.identifier * int * assoc * span
        | Arg of t
 
 
 
+      (* Is this juxtaposed element an identifier, or some other atomic element?
+       *)
       fun resolve ctx jux =
          (case jux of
              SMLSyntax.Jident (id, exp) =>
@@ -45,7 +48,7 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
                     NONE => Arg exp
 
                   | SOME {assoc, precedence} =>
-                      Oper (exp, precedence, assoc, Node.getSpan id))
+                      Oper (id, precedence, assoc, Node.getSpan id))
 
            | SMLSyntax.Jatom exp => Arg exp)
 
@@ -53,7 +56,8 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
       fun applyInfix oper item1 item2 =
          (* (case mode of
              CURRIED => applyCurriedInfix oper item1 item2
-           | TUPLED => *) applyTupledInfix oper item1 item2
+           | TUPLED => *)
+         applyTupledInfix oper item1 item2
 
 
       fun tighter prec prec' assoc assoc' pos =
@@ -131,6 +135,9 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
                 end)
 
 
+      (* parse takes a list of juxtaposed (pats/exps), some of which may be infix,
+       * and then resolves which way they associate based on precedence
+       *)
       fun parse table l (fullspan : Span.span) =
          (case l of
              [] => raise (Fail "excluded syntactically")
@@ -143,6 +150,7 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
 
            | first :: rest =>
                 (case resolve table first of
+                    (* Can't start with an infix operator *)
                     Oper (_, _, _, span) =>
                        raise (Error.SyntaxError ("misplaced infix operator", #1 span))
 
@@ -187,6 +195,7 @@ structure ExpPrecedence =
           fun apply e1 e2 =
              Node.create ( Eapp {left=e1, right=e2}, Node.join_span e1 e2 )
 
+          (*
           fun applyCurriedInfix oper e1 e2 =
              let
                 val new_span = Node.join_span e1 e2
@@ -197,6 +206,7 @@ structure ExpPrecedence =
                      , right = e2 }
                  , new_span )
              end
+          *)
 
           fun applyTupledInfix oper e1 e2 =
              let
@@ -204,7 +214,17 @@ structure ExpPrecedence =
              in
                Node.create
                  ( Eapp
-                     { left = oper
+                     (* NOTE: Here, we change the name of the operator, so that
+                      * it's not prefix-applied as its infix name.
+                      *)
+                     { left =
+                         (* NOTE: I've fucked with the location data here.
+                          *)
+                         Node.create_absurd
+                          (Eident { opp = false
+                                , id = [Node.map (fn sym => map_sym sym (fn s => "op" ^ s)) oper]
+                                }
+                          )
                      , right = Node.create (Etuple [e1, e2], new_span) }
                  , new_span )
              end
@@ -230,29 +250,23 @@ structure PatPrecedence =
                       , Node.join_span p1 p2)
 
                | _ =>
-                   (print (PrettyPrintAst.pretty_pat p1);
-                    raise (Error.SemanticError
+                   (raise (Error.SemanticError
                             ("pattern operator is not a constructor",
                               Node.getSpan p1))))
 
+          (*
           fun applyCurriedInfix oper e1 e2 =
              raise (Error.SyntaxError
                      ("infix pattern operator is curried", #1 (Node.getSpan oper)))
+          *)
 
           fun applyTupledInfix oper e1 e2 =
-             (case Node.getVal oper of
-                 Pconstr {id, ...} =>
                     let
                       val new_span = Node.join_span e1 e2
                     in
                       Node.create
-                        ( Papp { id=id
+                        ( Papp { id = [Node.map (fn sym => map_sym sym (fn s => "op" ^ s)) oper]
                                    , atpat = Node.create (Ptuple [e1, e2], new_span) }
                         , new_span)
                     end
-
-               | _ =>
-                    (* We never make a Jident [pat] with anything but Pconstr. *)
-                    raise (Fail "impossible"))
-
        end)
