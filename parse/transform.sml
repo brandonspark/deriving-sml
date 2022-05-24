@@ -29,7 +29,18 @@ structure Transform : TRANSFORM =
   struct
     open SMLSyntax
     open Common
+
+    (* Transform is set up such that the canonical form of values is a tuple,
+     * where the first projection is whatever part of the AST we are interested
+     * in, and the second projection is a context which carries the information
+     * we have received up until this point.
+     *
+     * Think of `||>` as one which "reaches inside" the tuple and only cares
+     * about the real element.
+     *)
     infix |>
+    infix ||>
+    fun x ||> f = x |> Pair.map_fst f
 
     type bindings = unit ScopeDict.t
     datatype assoc = Left | Right
@@ -47,54 +58,53 @@ structure Transform : TRANSFORM =
     fun fold_transform transform_f ctx xs =
       List.foldl
         (fn (x, (xs, ctx)) =>
-          transform_f ctx x
-          |> Pair.map_fst (fn x => x::xs))
+          transform_f (x, ctx)
+          ||> (fn x => x::xs))
         ([], ctx)
         xs
-      |> Pair.map_fst List.rev
+      ||> List.rev
 
     (****************
      * DECLARATIONS *
      ****************)
 
-    fun transform_strdec ctx strdec =
-      let open SMLSyntax in
+    fun transform_strdec (strdec, ctx) =
+      let
+        open SMLSyntax
+      in
         case Node.getVal strdec of
           DMdec dec =>
-            transform_dec ctx dec
+            transform_dec (dec, ctx)
             |> expand_node_with_ctx DMdec strdec
         | DMstruct mods =>
-            List.foldl
-              (fn ({id, seal, module}, (mods, ctx)) =>
+            fold_transform
+              (fn ({id, seal, module}, ctx) =>
                 let
                   val (seal, ctx) =
                     case seal of
                       NONE => (NONE, ctx)
                     | SOME { opacity, signat } =>
-                        transform_signat ctx signat
-                        |> Pair.map_fst
-                            (fn signat =>
+                        transform_signat (signat, ctx)
+                        ||> (fn signat =>
                               SOME
                                 { opacity = opacity
                                 , signat = signat
                                 }
                             )
                 in
-                  transform_module ctx module
-                  |> Pair.map_fst
-                      (fn module => {id=id, seal=seal, module=module}::mods)
+                  transform_module (module, ctx)
+                  ||> (fn module => {id=id, seal=seal, module=module})
                 end
               )
-              ([], ctx)
+              ctx
               mods
-            |> Pair.map_fst List.rev
             |> expand_node_with_ctx DMstruct strdec
         | DMlocal {left_dec, right_dec} =>
             let
               val new_ctx = Context.new_scope ctx
-              val (left_dec, new_ctx) = transform_strdec new_ctx left_dec
+              val (left_dec, new_ctx) = transform_strdec (left_dec, new_ctx)
               val new_ctx = Context.new_scope new_ctx
-              val (right_dec, new_ctx) = transform_strdec new_ctx right_dec
+              val (right_dec, new_ctx) = transform_strdec (right_dec, new_ctx)
             in
               ({left_dec=left_dec, right_dec=right_dec}, Context.pop_penultimate new_ctx)
               |> expand_node_with_ctx DMlocal strdec
@@ -112,13 +122,15 @@ structure Transform : TRANSFORM =
      * MODULE EXPRESSIONS *
      **********************)
 
-    and transform_module ctx module =
-      let open SMLSyntax in
+    and transform_module (module, ctx) =
+      let
+        open SMLSyntax
+      in
         case Node.getVal module of
           Mstruct strdec =>
             let
               val new_ctx = Context.new_scope ctx
-              val (strdec, new_ctx) = transform_strdec new_ctx strdec
+              val (strdec, new_ctx) = transform_strdec (strdec, new_ctx)
             in
               (* ctx, because we lose all the information we just got *)
               (strdec, ctx)
@@ -126,21 +138,21 @@ structure Transform : TRANSFORM =
             end
         | Mseal {module, opacity, signat} =>
             let
-              val (module, ctx) = transform_module ctx module
-              val (signat, ctx) = transform_signat ctx signat
+              val (module, ctx) = transform_module (module, ctx)
+              val (signat, ctx) = transform_signat (signat, ctx)
             in
               ({module=module, opacity=opacity, signat=signat}, ctx)
               |> expand_node_with_ctx Mseal module
             end
         | Mapp {functorr, module} =>
-            transform_module ctx module
-            |> Pair.map_fst (fn module => {functorr=functorr, module=module})
+            transform_module (module, ctx)
+            ||> (fn module => {functorr=functorr, module=module})
             |> expand_node_with_ctx Mapp module
         | Mlet {dec, module} =>
             (* TODO: this does not seem right *)
             let
-              val (strdec, new_ctx) = transform_strdec ctx dec
-              val (module, new_ctx) = transform_module new_ctx module
+              val (strdec, new_ctx) = transform_strdec (dec, ctx)
+              val (module, new_ctx) = transform_module (module, new_ctx)
             in
               ({dec=strdec, module=module}, ctx)
               |> expand_node_with_ctx Mlet module
@@ -148,42 +160,38 @@ structure Transform : TRANSFORM =
         | Mident _ => (module, ctx)
       end
 
-    and transform_typbinds ctx typbinds =
-      List.foldl
-        (fn ({tyvars, tycon, ty, deriving}, (typbinds, ctx)) =>
-          transform_ty ctx ty
-          |> Pair.map_fst (fn ty => {tyvars=tyvars, tycon=tycon, ty=ty, deriving=deriving}::typbinds))
-        ([], ctx)
+    and transform_typbinds (typbinds, ctx) =
+      fold_transform
+        (fn ({tyvars, tycon, ty, deriving}, ctx) =>
+          transform_ty (ty, ctx)
+          ||> (fn ty => {tyvars=tyvars, tycon=tycon, ty=ty, deriving=deriving}))
+        ctx
         typbinds
-      |> Pair.map_fst List.rev
 
-    and transform_conbinds ctx conbinds =
-      List.foldl
-        (fn ({opp, id, ty}, (conbinds, ctx)) =>
+    and transform_conbinds (conbinds, ctx) =
+      fold_transform
+        (fn ({opp, id, ty}, ctx) =>
           case ty of
-            NONE => ({opp=opp, id=id, ty=NONE}::conbinds, ctx)
+            NONE => ({opp=opp, id=id, ty=NONE}, ctx)
           | SOME ty =>
-              transform_ty ctx ty
-              |> Pair.map_fst (fn ty => {opp=opp, id=id, ty=SOME ty})
-              |> Pair.map_fst (fn result => result::conbinds))
-        ([], ctx)
+              transform_ty (ty, ctx)
+              ||> (fn ty => {opp=opp, id=id, ty=SOME ty})
+        )
+        ctx
         conbinds
-      |> Pair.map_fst List.rev
 
-    and transform_datbinds ctx datbinds =
-      List.foldl
-        (fn ({tyvars, tycon, conbinds, deriving}, (datbinds, ctx)) =>
-          transform_conbinds ctx conbinds
-          |> Pair.map_fst (fn conbinds =>
-              {tyvars=tyvars, tycon=tycon, conbinds=conbinds, deriving=deriving})
-          |> Pair.map_fst (fn result => result::datbinds))
-        ([], ctx)
+    and transform_datbinds (datbinds, ctx) =
+      fold_transform
+        (fn ({tyvars, tycon, conbinds, deriving}, ctx) =>
+          transform_conbinds (conbinds, ctx)
+          ||> (fn conbinds => {tyvars=tyvars, tycon=tycon, conbinds=conbinds, deriving=deriving})
+        )
+        ctx
         datbinds
-      |> Pair.map_fst List.rev
 
-    and transform_fvalbind ctx fvalbind =
-      List.foldl
-        (fn ({opp, id, pats, ty, exp}, (fvalbind, ctx)) =>
+    and transform_fvalbind (fvalbind, ctx) =
+      fold_transform
+        (fn ({opp, id, pats, ty, exp}, ctx) =>
           let
             val (pats, ctx) =
               fold_transform
@@ -193,22 +201,21 @@ structure Transform : TRANSFORM =
             val (ty, ctx) =
               case ty of
                 NONE => (NONE, ctx)
-              | SOME ty => transform_ty ctx ty |> Pair.map_fst SOME
-            val (exp, ctx) = transform_exp ctx exp
+              | SOME ty => transform_ty (ty, ctx) ||> SOME
+            val (exp, ctx) = transform_exp (exp, ctx)
           in
-            ({opp=opp, id=id, pats=pats, ty=ty, exp=exp}::fvalbind, ctx)
+            ({opp=opp, id=id, pats=pats, ty=ty, exp=exp}, ctx)
           end)
-        ([], ctx)
+        ctx
         fvalbind
-      |> Pair.map_fst List.rev
 
-    and transform_fvalbinds ctx fvalbinds =
+    and transform_fvalbinds (fvalbinds, ctx) =
       fold_transform
         transform_fvalbind
         ctx
         fvalbinds
 
-    and transform_exbinds ctx exbinds = (exbinds, ctx)
+    and transform_exbinds (exbinds, ctx) = (exbinds, ctx)
 
     (****************
      * DECLARATIONS *
@@ -216,33 +223,35 @@ structure Transform : TRANSFORM =
 
     (* transform_dec' turns one declaration into one or more declarations
      *)
-    and transform_dec' ctx dec =
-      let open SMLSyntax in
+    and transform_dec' (dec, ctx) =
+      let
+        open SMLSyntax
+      in
         case Node.getVal dec of
           Dval {recc, tyvars, valbinds} =>
-            List.foldl
-              (fn ({pat, exp}, (valbinds, ctx)) =>
+            fold_transform
+              (fn ({pat, exp}, ctx) =>
                 let
-                  val (pat, ctx) = transform_pat ctx pat
-                  val (exp, ctx) = transform_exp ctx exp
+                  val (pat, ctx) = transform_pat (pat, ctx)
+                  val (exp, ctx) = transform_exp (exp, ctx)
                 in
-                  ({pat=pat, exp=exp}::valbinds, ctx)
+                  ({pat=pat, exp=exp}, ctx)
                 end)
-              ([], ctx)
+              ctx
               valbinds
-            |> Pair.map_fst (fn valbinds => {recc=recc, tyvars=tyvars, valbinds=List.rev valbinds})
+            ||> (fn valbinds => {recc=recc, tyvars=tyvars, valbinds=valbinds})
             |> expand_node_with_ctx Dval dec
             |> mk_sing
         | Dfun {tyvars, fvalbinds} =>
             let
-              val (fvalbinds, ctx) = transform_fvalbinds ctx fvalbinds
+              val (fvalbinds, ctx) = transform_fvalbinds (fvalbinds, ctx)
             in
               ({tyvars=tyvars, fvalbinds=fvalbinds}, ctx)
               |> expand_node_with_ctx Dfun dec
               |> mk_sing
             end
         | Dtype typbinds =>
-            transform_typbinds ctx typbinds
+            transform_typbinds (typbinds, ctx)
             |> expand_node_with_ctx Dtype dec
             |> Show.codegen_dec
             |> fix_codegen
@@ -253,11 +262,11 @@ structure Transform : TRANSFORM =
          * change any instance of a `Ddatdec`*)
         | Ddatdec {datbinds, withtypee} =>
             let
-              val (datbinds, ctx) = transform_datbinds ctx datbinds
+              val (datbinds, ctx) = transform_datbinds (datbinds, ctx)
               val (withtypee, ctx) =
                 case withtypee of
                   SOME typbinds =>
-                    let val (typbinds, ctx) = transform_typbinds ctx typbinds in
+                    let val (typbinds, ctx) = transform_typbinds (typbinds, ctx) in
                       (SOME typbinds, ctx)
                     end
                 | NONE =>
@@ -271,15 +280,17 @@ structure Transform : TRANSFORM =
 
         | Dabstype {datbinds, withtypee, withh} =>
             let
-              val (datbinds, ctx) = transform_datbinds ctx datbinds
+              val (datbinds, ctx) = transform_datbinds (datbinds, ctx)
               val (withtypee, ctx) =
                 case withtypee of
                   SOME typbinds =>
-                    let val (typbinds, ctx) = transform_typbinds ctx typbinds in
+                    let
+                      val (typbinds, ctx) = transform_typbinds (typbinds, ctx)
+                    in
                       (SOME typbinds, ctx)
                     end
                 | NONE => (NONE, ctx)
-              val (withh, ctx) = transform_dec ctx withh
+              val (withh, ctx) = transform_dec (withh, ctx)
             in
               ({datbinds=datbinds, withtypee=withtypee, withh=withh}, ctx)
               |> expand_node_with_ctx Dabstype dec
@@ -288,17 +299,17 @@ structure Transform : TRANSFORM =
             end
 
         | Dexception exbinds =>
-            transform_exbinds ctx exbinds
+            transform_exbinds (exbinds, ctx)
             |> expand_node_with_ctx Dexception dec
             |> mk_sing
         | Dlocal {left_dec, right_dec} =>
             let
               (* For the stuff declared in the `local` *)
               val new_ctx = Context.new_scope ctx
-              val (left_dec, new_ctx) = transform_dec new_ctx left_dec
+              val (left_dec, new_ctx) = transform_dec (left_dec, new_ctx)
               (* For the stuff declared in the `in` *)
               val new_ctx = Context.new_scope new_ctx
-              val (right_dec, new_ctx) = transform_dec new_ctx right_dec
+              val (right_dec, new_ctx) = transform_dec (right_dec, new_ctx)
             in
               (* Pop penultimate, to get rid of the local stuff *)
               ({left_dec=left_dec, right_dec=right_dec}, Context.pop_penultimate new_ctx)
@@ -310,8 +321,7 @@ structure Transform : TRANSFORM =
               transform_dec
               ctx
               decs
-            |> Pair.map_fst
-                ( List.foldr
+            ||> ( List.foldr
                   (fn (dec, acc) =>
                     (case Node.getVal dec of
                       Dseq decs => decs @ acc
@@ -369,8 +379,8 @@ structure Transform : TRANSFORM =
               (dec, ctx)
               |> mk_sing
       end
-    and transform_dec ctx dec =
-      case transform_dec' ctx dec of
+    and transform_dec (dec, ctx) =
+      case transform_dec' (dec, ctx) of
         ([], _) => raise Fail "I think something went wrong"
       | ([dec], ctx) => (dec, ctx)
       | (mult, ctx) => (Node.create_absurd (Dseq mult), ctx)
@@ -379,17 +389,18 @@ structure Transform : TRANSFORM =
      * EXPRESSIONS *
      ***************)
 
-    and transform_exp ctx exp =
-      let open SMLSyntax in
+    and transform_exp (exp, ctx) =
+      let
+        open SMLSyntax
+      in
         case Node.getVal exp of
           Erecord exprows =>
-            List.foldl
-              (fn ({lab,exp}, (exprows, ctx)) =>
-                transform_exp ctx exp
-                |> Pair.map_fst (fn exp => {lab=lab, exp=exp}::exprows))
-              ([], ctx)
+            fold_transform
+              (fn ({lab,exp}, ctx) =>
+                transform_exp (exp, ctx)
+                ||> (fn exp => {lab=lab, exp=exp}))
+              ctx
               exprows
-            |> Pair.map_fst List.rev
             |> expand_node_with_ctx Erecord exp
         | Etuple exps =>
             fold_transform
@@ -411,118 +422,116 @@ structure Transform : TRANSFORM =
             |> expand_node_with_ctx Eseq exp
         | Elet {dec, exps} =>
             let
-              val (dec, ctx) = transform_dec ctx dec
+              val (dec, ctx) = transform_dec (dec, ctx)
             in
               fold_transform
                 transform_exp
                 ctx
                 exps
-              |> Pair.map_fst (fn exps => {dec=dec, exps=exps})
+              ||> (fn exps => {dec=dec, exps=exps})
               |> expand_node_with_ctx Elet exp
             end
         | Eapp {left, right} =>
             let
-              val (left, ctx) = transform_exp ctx left
-              val (right, ctx) = transform_exp ctx right
+              val (left, ctx) = transform_exp (left, ctx)
+              val (right, ctx) = transform_exp (right, ctx)
             in
               ({left=left, right=right}, ctx)
               |> expand_node_with_ctx Eapp exp
             end
         | Etyped {exp, ty} =>
             let
-              val (exp, ctx) = transform_exp ctx exp
-              val (ty, ctx) = transform_ty ctx ty
+              val (exp, ctx) = transform_exp (exp, ctx)
+              val (ty, ctx) = transform_ty (ty, ctx)
             in
               ({exp=exp, ty=ty}, ctx)
               |> expand_node_with_ctx Etyped exp
             end
         | Eandalso {left, right} =>
             let
-              val (left, ctx) = transform_exp ctx left
-              val (right, ctx) = transform_exp ctx right
+              val (left, ctx) = transform_exp (left, ctx)
+              val (right, ctx) = transform_exp (right, ctx)
             in
               ({left=left, right=right}, ctx)
               |> expand_node_with_ctx Eandalso exp
             end
         | Eorelse {left, right} =>
             let
-              val (left, ctx) = transform_exp ctx left
-              val (right, ctx) = transform_exp ctx right
+              val (left, ctx) = transform_exp (left, ctx)
+              val (right, ctx) = transform_exp (right, ctx)
             in
               ({left=left, right=right}, ctx)
               |> expand_node_with_ctx Eorelse exp
             end
         | Ehandle {exp, matches} =>
             let
-              val (exp, ctx) = transform_exp ctx exp
+              val (exp, ctx) = transform_exp (exp, ctx)
             in
-              List.foldl
-                (fn ({pat, exp}, (matches, ctx)) =>
+              fold_transform
+                (fn ({pat, exp}, ctx) =>
                   let
-                    val (pat, ctx) = transform_pat ctx pat
-                    val (exp, ctx) = transform_exp ctx exp
+                    val (pat, ctx) = transform_pat (pat, ctx)
+                    val (exp, ctx) = transform_exp (exp, ctx)
                   in
-                    ({pat=pat, exp=exp}::matches, ctx)
+                    ({pat=pat, exp=exp}, ctx)
                   end)
-                ([], ctx)
+                ctx
                 matches
-              |> Pair.map_fst (fn matches => {exp=exp, matches=List.rev matches})
+              ||> (fn matches => {exp=exp, matches=matches})
               |> expand_node_with_ctx Ehandle exp
             end
         | Eraise exp =>
-            transform_exp ctx exp
+            transform_exp (exp, ctx)
             |> expand_node_with_ctx Eraise exp
         | Eif {exp1, exp2, exp3} =>
             let
-              val (exp1, ctx) = transform_exp ctx exp1
-              val (exp2, ctx) = transform_exp ctx exp2
-              val (exp3, ctx) = transform_exp ctx exp3
+              val (exp1, ctx) = transform_exp (exp1, ctx)
+              val (exp2, ctx) = transform_exp (exp2, ctx)
+              val (exp3, ctx) = transform_exp (exp3, ctx)
             in
               ({exp1=exp1, exp2=exp2, exp3=exp3}, ctx)
               |> expand_node_with_ctx Eif exp
             end
         | Ewhile {exp1, exp2} =>
             let
-              val (exp1, ctx) = transform_exp ctx exp1
-              val (exp2, ctx) = transform_exp ctx exp2
+              val (exp1, ctx) = transform_exp (exp1, ctx)
+              val (exp2, ctx) = transform_exp (exp2, ctx)
             in
               ({exp1=exp1, exp2=exp2}, ctx)
               |> expand_node_with_ctx Ewhile exp
             end
         | Ecase {exp=exp', matches} =>
             let
-              val (exp', ctx) = transform_exp ctx exp'
+              val (exp', ctx) = transform_exp (exp', ctx)
             in
-              List.foldl
-                (fn ({pat, exp}, (matches, ctx)) =>
+              fold_transform
+                (fn ({pat, exp}, ctx) =>
                   let
-                    val (pat, ctx) = transform_pat ctx pat
-                    val (exp, ctx) = transform_exp ctx exp
+                    val (pat, ctx) = transform_pat (pat, ctx)
+                    val (exp, ctx) = transform_exp (exp, ctx)
                   in
-                    ({pat=pat, exp=exp}::matches, ctx)
+                    ({pat=pat, exp=exp}, ctx)
                   end)
-                ([], ctx)
+                ctx
                 matches
-              |> Pair.map_fst List.rev
-              |> Pair.map_fst (fn matches => {exp=exp', matches=matches})
+              ||> (fn matches => {exp=exp', matches=matches})
               |> expand_node_with_ctx Ecase exp
             end
         | Efn matches =>
-            List.foldl
-              (fn ({pat, exp}, (matches, ctx)) =>
+            fold_transform
+              (fn ({pat, exp}, ctx) =>
                 let
-                  val (pat, ctx) = transform_pat ctx pat
-                  val (exp, ctx) = transform_exp ctx exp
+                  val (pat, ctx) = transform_pat (pat, ctx)
+                  val (exp, ctx) = transform_exp (exp, ctx)
                 in
-                  ({pat=pat, exp=exp}::matches, ctx)
+                  ({pat=pat, exp=exp}, ctx)
                 end)
-              ([], ctx)
+              ctx
               matches
-            |> Pair.map_fst List.rev
             |> expand_node_with_ctx Efn exp
         | Ejuxta ejuxtas =>
             let
-              fun transform_ejuxta ctx ejuxta =
+              fun transform_ejuxta (ejuxta, ctx) =
                 case ejuxta of
                   Jident (id, exp) => (Jident (id, exp), ctx)
                 | Jatom exp =>
@@ -530,8 +539,8 @@ structure Transform : TRANSFORM =
                       Eident _ => (Jatom exp, ctx)
                     | Econstr _ => (Jatom exp, ctx)
                     | _ =>
-                        transform_exp ctx exp
-                        |> Pair.map_fst (fn exp => Jatom exp))
+                        transform_exp (exp, ctx)
+                        ||> (fn exp => Jatom exp))
 
               val (ejuxtas, ctx) =
                 fold_transform
@@ -564,22 +573,24 @@ structure Transform : TRANSFORM =
      * ROW PATTERNS *
      ****************)
 
-    and transform_patrow ctx patrow =
-      let open SMLSyntax in
+    and transform_patrow (patrow, ctx) =
+      let
+        open SMLSyntax
+      in
         case patrow of
           PRlab {lab, pat} =>
-            transform_pat ctx pat
-            |> Pair.map_fst (fn pat => {lab=lab, pat=pat})
-            |> Pair.map_fst PRlab
+            transform_pat (pat, ctx)
+            ||> (fn pat => {lab=lab, pat=pat})
+            ||> PRlab
         | PRas {id, ty, aspat} =>
             let
               val (ty, ctx) =
                 case ty of
-                  SOME ty => transform_ty ctx ty |> Pair.map_fst SOME
+                  SOME ty => transform_ty (ty, ctx) ||> SOME
                 | NONE => (NONE, ctx)
               val (aspat, ctx) =
                 case aspat of
-                  SOME aspat => transform_pat ctx aspat |> Pair.map_fst SOME
+                  SOME aspat => transform_pat (aspat, ctx) ||> SOME
                 | NONE => (NONE, ctx)
             in
               (PRas {id=id, ty=ty, aspat=aspat}, ctx)
@@ -591,8 +602,10 @@ structure Transform : TRANSFORM =
      * PATTERNS *
      ************)
 
-    and transform_pat ctx pat =
-      let open SMLSyntax in
+    and transform_pat (pat, ctx) =
+      let
+        open SMLSyntax
+      in
         case Node.getVal pat of
           Precord patrows =>
             fold_transform
@@ -613,13 +626,13 @@ structure Transform : TRANSFORM =
               pats
             |> expand_node_with_ctx Ptuple pat
         | Papp {id, atpat} =>
-            transform_pat ctx atpat
-            |> Pair.map_fst (fn atpat => {id=id, atpat=atpat})
+            transform_pat (atpat, ctx)
+            ||> (fn atpat => {id=id, atpat=atpat})
             |> expand_node_with_ctx Papp pat
         | Ptyped {pat, ty} =>
             let
-              val (pat, ctx) = transform_pat ctx pat
-              val (ty, ctx) = transform_ty ctx ty
+              val (pat, ctx) = transform_pat (pat, ctx)
+              val (ty, ctx) = transform_ty (ty, ctx)
             in
               ({pat=pat, ty=ty}, ctx)
               |> expand_node_with_ctx Ptyped pat
@@ -628,16 +641,16 @@ structure Transform : TRANSFORM =
             let
               val (ty, ctx) =
                 case ty of
-                  SOME ty => transform_ty ctx ty |> Pair.map_fst SOME
+                  SOME ty => transform_ty (ty, ctx) ||> SOME
                 | NONE => (ty, ctx)
-              val (aspat, ctx) = transform_pat ctx aspat
+              val (aspat, ctx) = transform_pat (aspat, ctx)
             in
               ({opp=opp, id=id, ty=ty, aspat=aspat}, ctx)
               |> expand_node_with_ctx Playered pat
             end
         | Pjuxta pjuxtas =>
             let
-              fun transform_pjuxta ctx pjuxta =
+              fun transform_pjuxta (pjuxta, ctx) =
                 case pjuxta of
                   Jident (id, pat) => (Jident (id, pat), ctx)
                 | Jatom pat =>
@@ -645,8 +658,8 @@ structure Transform : TRANSFORM =
                       Pident _ => (Jatom pat, ctx)
                     | Pconstr _ => (Jatom pat, ctx)
                     | _ =>
-                        transform_pat ctx pat
-                        |> Pair.map_fst (fn pat => Jatom pat))
+                        transform_pat (pat, ctx)
+                        ||> (fn pat => Jatom pat))
 
               val (pjuxtas, ctx) =
                 fold_transform
@@ -682,41 +695,43 @@ structure Transform : TRANSFORM =
           | Punit ) => (pat, ctx)
       end
 
-    and transform_ty ctx ty = (ty, ctx)
+    and transform_ty (ty, ctx) = (ty, ctx)
 
-    and transform_fundec ctx fundec =
-      let open SMLSyntax
-        val funbinds = Node.getVal fundec in
-        List.foldl
-          (fn (funbind_node, (funbinds, ctx)) =>
+    and transform_fundec (fundec, ctx) =
+      let
+        open SMLSyntax
+        val funbinds = Node.getVal fundec
+      in
+        fold_transform
+          (fn (funbind_node, ctx) =>
             let
               val {id, arg_id, signat, body} = Node.getVal funbind_node
-              val (signat, ctx) = transform_signat ctx signat
-              val (body, ctx) = transform_module ctx body
+              val (signat, ctx) = transform_signat (signat, ctx)
+              val (body, ctx) = transform_module (body, ctx)
             in
               (Node.map
                 (Fn.const {id=id, arg_id=arg_id, signat=signat, body=body})
-                funbind_node :: funbinds, ctx)
+                funbind_node, ctx)
             end)
-          ([], ctx)
+          ctx
           funbinds
-        |> Pair.map_fst List.rev
         |> expand_node_with_ctx Fn.id fundec
       end
 
-    and transform_sigdec ctx sigdec =
-      let open SMLSyntax
-          val sigbinds = Node.getVal sigdec in
-        List.foldl
-          (fn ({id, signat}, (sigbinds, ctx)) =>
+    and transform_sigdec (sigdec, ctx) =
+      let
+        open SMLSyntax
+        val sigbinds = Node.getVal sigdec
+      in
+        fold_transform
+          (fn ({id, signat}, ctx) =>
             let
-              val (signat, ctx) = transform_signat ctx signat
+              val (signat, ctx) = transform_signat (signat, ctx)
             in
-              ({id=id, signat=signat}::sigbinds, ctx)
+              ({id=id, signat=signat}, ctx)
             end)
-          ([], ctx)
+          ctx
           sigbinds
-        |> Pair.map_fst List.rev
         |> expand_node_with_ctx Fn.id sigdec
       end
 
@@ -724,73 +739,74 @@ structure Transform : TRANSFORM =
      * SIGNATURE EXPRESSIONS *
      *************************)
 
-    and transform_signat ctx signat =
-      let open SMLSyntax in
+    and transform_signat (signat, ctx) =
+      let
+        open SMLSyntax
+      in
         case Node.getVal signat of
           Sspec specs =>
             List.foldl
               (fn (spec, (specs, ctx)) =>
-                transform_spec ctx spec
-                |> Pair.map_fst (fn new_specs => specs @ new_specs))
+                transform_spec (spec, ctx)
+                ||> (fn new_specs => specs @ new_specs))
               ([], ctx)
               specs
             |> expand_node_with_ctx Sspec signat
         | Sident ident => (signat, ctx)
         | Swhere {signat, wheretypee={tyvars, id, ty}} =>
             let
-              val (signat, ctx) = transform_signat ctx signat
-              val (ty, ctx) = transform_ty ctx ty
+              val (signat, ctx) = transform_signat (signat, ctx)
+              val (ty, ctx) = transform_ty (ty, ctx)
             in
               ({signat=signat, wheretypee={tyvars=tyvars, id=id, ty=ty}}, ctx)
               |> expand_node_with_ctx Swhere signat
             end
       end
 
-    and transform_condescs ctx condescs =
-      List.foldl
-        (fn ({id, ty}, (condescs, ctx)) =>
+    and transform_condescs (condescs, ctx) =
+      fold_transform
+        (fn ({id, ty}, ctx) =>
           case ty of
-            NONE => ({id=id, ty=NONE}::condescs, ctx)
+            NONE => ({id=id, ty=NONE}, ctx)
           | SOME ty =>
-              transform_ty ctx ty |> Pair.map_fst (fn ty => {id=id, ty=SOME ty}::condescs))
-        ([], ctx)
+              transform_ty (ty, ctx)
+              ||> (fn ty => {id=id, ty=SOME ty}))
+        ctx
         condescs
-      |> Pair.map_fst List.rev
 
-    and transform_typdesc ctx {tyvars, tycon, ty, deriving} =
+    and transform_typdesc ({tyvars, tycon, ty, deriving}, ctx) =
       case ty of
         NONE => ({tyvars=tyvars, tycon=tycon, ty=NONE, deriving=deriving}, ctx)
       | SOME ty =>
-          transform_ty ctx ty
-          |> Pair.map_fst
-              (fn ty => {tyvars=tyvars, tycon=tycon, ty=SOME ty, deriving=deriving})
+          transform_ty (ty, ctx)
+          ||> (fn ty => {tyvars=tyvars, tycon=tycon, ty=SOME ty, deriving=deriving})
 
     (****************************
      * SIGNATURE SPECIFICATIONS *
      ****************************)
 
     (* transform_spec turns a spec into one or more specs *)
-    and transform_spec ctx spec =
+    and transform_spec (spec, ctx) =
       let open SMLSyntax in
         case Node.getVal spec of
           SPval {id, ty} =>
-            transform_ty ctx ty
-            |> Pair.map_fst (fn ty => {id=id, ty=ty})
+            transform_ty (ty, ctx)
+            ||> (fn ty => {id=id, ty=ty})
             |> expand_node_with_ctx SPval spec
             |> mk_sing
         | SPtype typdesc =>
-            transform_typdesc ctx typdesc
+            transform_typdesc (typdesc, ctx)
             |> expand_node_with_ctx SPtype spec
             |> Show.codegen_spec
             |> fix_codegen
         | SPeqtype typdesc =>
-            transform_typdesc ctx typdesc
+            transform_typdesc (typdesc, ctx)
             |> expand_node_with_ctx SPeqtype spec
             |> Show.codegen_spec
             |> fix_codegen
         | SPdatdec {tyvars, tycon, condescs, deriving} =>
-            transform_condescs ctx condescs
-            |> Pair.map_fst (fn condescs =>
+            transform_condescs (condescs, ctx)
+            ||> (fn condescs =>
                 {tyvars=tyvars, tycon=tycon, condescs=condescs, deriving=deriving})
             |> expand_node_with_ctx SPdatdec spec
             |> Show.codegen_spec
@@ -800,29 +816,29 @@ structure Transform : TRANSFORM =
               val (ty, ctx) =
                 case ty of
                   NONE => (NONE, ctx)
-                | SOME ty => transform_ty ctx ty |> Pair.map_fst SOME
+                | SOME ty => transform_ty (ty, ctx) ||> SOME
             in
               ({id=id, ty=ty}, ctx)
             end
             |> expand_node_with_ctx SPexception spec
             |> mk_sing
         | SPmodule {id, signat} =>
-            transform_signat ctx signat
-            |> Pair.map_fst (fn signat => {id=id, signat=signat})
+            transform_signat (signat, ctx)
+            ||> (fn signat => {id=id, signat=signat})
             |> expand_node_with_ctx SPmodule spec
             |> mk_sing
         | SPinclude signat =>
-            transform_signat ctx signat
+            transform_signat (signat, ctx)
             |> expand_node_with_ctx SPinclude spec
             |> mk_sing
         | SPsharing {specs, tycons} =>
             List.foldl
               (fn (spec, (specs, ctx)) =>
-                transform_spec ctx spec
-                |> Pair.map_fst (fn new_specs => specs @ new_specs))
+                transform_spec (spec, ctx)
+                ||> (fn new_specs => specs @ new_specs))
               ([], ctx)
               specs
-            |> Pair.map_fst (fn specs => {specs=specs, tycons=tycons})
+            ||> (fn specs => {specs=specs, tycons=tycons})
             |> expand_node_with_ctx SPsharing spec
             |> mk_sing
         | ( SPdatrepl _ ) =>
@@ -837,17 +853,17 @@ structure Transform : TRANSFORM =
     fun transform topdecs =
       let
         open SMLSyntax
-        fun transform_topdec ctx topdec =
+        fun transform_topdec (topdec, ctx) =
           case topdec of
             Strdec strdec =>
-              transform_strdec ctx strdec
-              |> Pair.map_fst Strdec
+              transform_strdec (strdec, ctx)
+              ||> Strdec
           | Sigdec sigdec =>
-              transform_sigdec ctx sigdec
-              |> Pair.map_fst Sigdec
+              transform_sigdec (sigdec, ctx)
+              ||> Sigdec
           | Fundec fundec =>
-              transform_fundec ctx fundec
-              |> Pair.map_fst Fundec
+              transform_fundec (fundec, ctx)
+              ||> Fundec
         val (new_topdecs, _) =
           fold_transform
             transform_topdec
