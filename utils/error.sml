@@ -1,65 +1,89 @@
 
+datatype warning =
+    ParseWarning of (string * string list)
+  | InvalidExt of string
+  | InvalidFile of string
+  | LexWarning of
+       { filename : string
+       , reason : string
+       , pos : int
+       , rest : char list
+       }
+  | TransformWarning of
+       { filename : string
+       , reason : string
+       , pos : int
+       }
+  | GeneralWarning of
+       { filename : string
+       , reason : string
+       , span : (int * int)
+       }
+
+datatype error =
+    ParseError of (string * string list)
+  | TransformError of
+      { reason : string
+      , pos : int
+      }
+  | LexError of
+       { reason : string
+       , pos : int
+       , rest : char list
+       }
+  | ExpectedIdent of
+       { expected : string
+       , got : string
+       , span : (int * int)
+       }
+  | FixityError of
+       { reason : string
+       , span : (int * int)
+       }
+
+datatype signal =
+    SigError of error
+  | SigWarn of warning
+
 signature ERROR =
-   sig
+  sig
 
-      datatype place = POS of Span.pos | SPAN of Span.span | UNKNOWN
+    datatype warning = datatype warning
+    datatype error = datatype error
+    datatype signal = datatype signal
 
-      val advancePlace : place -> int -> place
-      val placeToString : string -> place -> string
-      val isUnknown : place -> bool
+    exception Signal of signal
 
-      exception Error of string * place
-      exception NotFound
+    val warn : ('a -> (warning -> 'a))
 
-      val SyntaxError : string * Span.pos -> exn
-      val SemanticError : string * Span.span -> exn
-      val GeneralError : string -> exn
-
-      val warning : string * place -> unit
-
-   end
-
-
+    val err : (error -> 'a)
+  end
 structure Error :> ERROR =
-   struct
+  struct
 
-      datatype place = POS of Span.pos | SPAN of Span.span | UNKNOWN
+    datatype warning = datatype warning
+    datatype error = datatype error
+    datatype signal = datatype signal
 
-      fun advancePlace place n =
-         (case place of
-             POS m => POS (m + n)
+    exception Signal of signal
 
-           | SPAN (l, r) => SPAN (l + n, r + n)
+    fun warn x warning =
+      ( print
+        ( case warning of
+            ParseWarning (filename, rest) =>
+               "failed to parse file " ^ filename ^ ", skipping\n" ^ "remaining: "
+               ^ String.substring ( String.concatWith " " rest, 0, 25) ^ "\n"
+          | (InvalidExt filename) =>
+              "Invalid extension: " ^ filename ^ "\n"
 
-           | UNKNOWN => UNKNOWN)
+          | (InvalidFile filename) =>
+              "Invalid file: " ^ filename ^ "\n"
 
-      fun placeToString prefix place =
-         (case place of
-             POS pos => prefix ^ Int.toString pos
+          | (LexWarning {filename, reason, pos, rest}) =>
+              "temp\n"
+        )
+      ; x
+      )
 
-           | SPAN (l, r) => String.concat [prefix, Int.toString l, "-", Int.toString r]
-
-           | UNKNOWN => "")
-
-      fun isUnknown place =
-         (case place of
-             UNKNOWN => true
-           | _ => false)
-
-
-      exception Error of string * place
-      exception NotFound
-
-      fun SyntaxError (str, pos) = Error (str, POS pos)
-      fun SemanticError (str, span) = Error (str, SPAN span)
-      fun GeneralError str = Error (str, UNKNOWN)
-
-      fun warning (str, place) =
-         (
-         print "Warning: ";
-         print str;
-         print (placeToString " at " place);
-         print "\n"
-         )
-
-   end
+    fun err error = raise Signal (SigError error)
+  end
