@@ -1013,7 +1013,6 @@ structure Parser :> PARSER =
                 , body = body }
               , Node.join_span id body
               )
->>>>>>> 2a2d23f (can parse all files except cmlib now)
           val sing_funbinds = sing
           val cons_funbinds = op ::
 

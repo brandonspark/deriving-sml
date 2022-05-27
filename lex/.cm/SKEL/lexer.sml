@@ -1,0 +1,2 @@
+Skeleton 5
+d3f2ä¢Stream"ä¢Token"aã¢LEXER"h0ad"Lexer"jh6egp1d"Span"Cegp1ÿåçğ±ä¢Error"f6ä¢Char"Cÿä¢List"ä¢Symbol"ä¢String"ä¢Node"Nad"Table"gp1d"SymbolHashTable"egp1ÿCÿ>f5Cd"StringCvt"ÿÿÿd"Int"Cÿÿ&ÿ/d"Real"d"TextIO"Naä¢Arg"h1áä¢Streamable"çğ±ä¢StreamStreamable"aä¢Input"h2ÿƒaÿƒgp1ÿƒad"LexMain"jgp1ÿ„gp1e"LexMainFun"Ngp1ÿ
