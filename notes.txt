@@ -35,8 +35,9 @@ gonna need one for datatype replication here too
       granularity, since decs may be expanded into more than just one dec.
       For now, hardcoded on `spec` and `dec`.
 - [X] add codegen for show
-
-
+- [X] add codegen for eq
+- [X] add codegen for ord
+- [X] add codegen for map
 
 - Can't do NJ extensions (in particular, functor syntactic sugar).
   - Not a big deal, except for the fact that we really should, for best usage
@@ -49,3 +50,19 @@ gonna need one for datatype replication here too
   - As such, we're constrained so that `deriving` should work "invisibly", and not
     show anything that it generates. Granted, this is how OCaml's works too, so
     maybe it's fine.
+- currently, we're zeroing out location data with absurd because code insertion
+  fucks literally everything up
+  - it's possible that we can alter the tokens to be more friendly by making
+    tokens work "relationally", and store offsets from nearby tokens, as opposed
+    to exact data
+- It would be nice if derive expressions gave error messages for improper usage.
+  - For instance, you could have an error for:
+    1) invalid number of tyargs (e.g. `[.show: (int, int) option]`)
+    2) nonexistent types (e.g. `[.show: type_which_doesnt_exist]`)
+  - The first way is dependent on knowing the arity of type constructors at
+    parse time, which is perhaps impossible without very significant overhaul.
+  - The second way is to have an extra `Ederive` variant, and push back derive
+    expression rewriting to transform time. This will also necessitate that
+    `Context`s store modular scope information.
+
+PLUGIN SPECIFIC:

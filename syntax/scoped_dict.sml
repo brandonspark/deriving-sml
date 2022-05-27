@@ -60,3 +60,6 @@ functor ScopedDict (KeyDict : DICT) :>
       | (NONE, []) => raise NotFound
       | (NONE, d::ds) => lookup (d, ds) k
   end
+
+structure StrDict = RedBlackDict(structure Key = StringOrdered)
+structure ScopeDict = ScopedDict(StrDict)

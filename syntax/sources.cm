@@ -1,15 +1,19 @@
 Group
+  structure Token
   structure SMLSyntax
+
+  structure ScopeDict
   structure Context
+
   structure PrettyPrintAst
 is
+  ../cmlib/cmlib.cm
   ../utils/sources.cm
-  ../lex/sources.cm
 
+  token.sml
   sml-syntax.sml
 
   scoped_dict.sml
-  dict.sml
   context.sml
 
   PrettyPrintAst.sml

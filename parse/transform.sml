@@ -46,8 +46,6 @@ structure Transform : TRANSFORM =
     datatype assoc = Left | Right
 
     fun mk_sing (x, ctx) = ([x], ctx)
-    fun fix_codegen (l, ctx) =
-      (List.map (fn x => Node.create_absurd x) l, ctx)
 
     (* For when we have the result we need, but we need to map it and place it
      * inside of a separate node. We keep the context, too. *)
@@ -228,95 +226,7 @@ structure Transform : TRANSFORM =
         open SMLSyntax
       in
         case Node.getVal dec of
-          Dval {recc, tyvars, valbinds} =>
-            fold_transform
-              (fn ({pat, exp}, ctx) =>
-                let
-                  val (pat, ctx) = transform_pat (pat, ctx)
-                  val (exp, ctx) = transform_exp (exp, ctx)
-                in
-                  ({pat=pat, exp=exp}, ctx)
-                end)
-              ctx
-              valbinds
-            ||> (fn valbinds => {recc=recc, tyvars=tyvars, valbinds=valbinds})
-            |> expand_node_with_ctx Dval dec
-            |> mk_sing
-        | Dfun {tyvars, fvalbinds} =>
-            let
-              val (fvalbinds, ctx) = transform_fvalbinds (fvalbinds, ctx)
-            in
-              ({tyvars=tyvars, fvalbinds=fvalbinds}, ctx)
-              |> expand_node_with_ctx Dfun dec
-              |> mk_sing
-            end
-        | Dtype typbinds =>
-            transform_typbinds (typbinds, ctx)
-            |> expand_node_with_ctx Dtype dec
-            |> Show.codegen_dec
-            |> fix_codegen
-
-        (* DERIVING STUFF HERE
-         * So, because we have to do code generation on the AST, we have to
-         * start at a higher granularity than just the `datbind` itself. So, we
-         * change any instance of a `Ddatdec`*)
-        | Ddatdec {datbinds, withtypee} =>
-            let
-              val (datbinds, ctx) = transform_datbinds (datbinds, ctx)
-              val (withtypee, ctx) =
-                case withtypee of
-                  SOME typbinds =>
-                    let val (typbinds, ctx) = transform_typbinds (typbinds, ctx) in
-                      (SOME typbinds, ctx)
-                    end
-                | NONE =>
-                    (NONE, ctx)
-            in
-              ({datbinds=datbinds, withtypee=withtypee}, ctx)
-              |> expand_node_with_ctx Ddatdec dec
-              |> Show.codegen_dec
-              |> fix_codegen
-            end
-
-        | Dabstype {datbinds, withtypee, withh} =>
-            let
-              val (datbinds, ctx) = transform_datbinds (datbinds, ctx)
-              val (withtypee, ctx) =
-                case withtypee of
-                  SOME typbinds =>
-                    let
-                      val (typbinds, ctx) = transform_typbinds (typbinds, ctx)
-                    in
-                      (SOME typbinds, ctx)
-                    end
-                | NONE => (NONE, ctx)
-              val (withh, ctx) = transform_dec (withh, ctx)
-            in
-              ({datbinds=datbinds, withtypee=withtypee, withh=withh}, ctx)
-              |> expand_node_with_ctx Dabstype dec
-              |> Show.codegen_dec
-              |> fix_codegen
-            end
-
-        | Dexception exbinds =>
-            transform_exbinds (exbinds, ctx)
-            |> expand_node_with_ctx Dexception dec
-            |> mk_sing
-        | Dlocal {left_dec, right_dec} =>
-            let
-              (* For the stuff declared in the `local` *)
-              val new_ctx = Context.new_scope ctx
-              val (left_dec, new_ctx) = transform_dec (left_dec, new_ctx)
-              (* For the stuff declared in the `in` *)
-              val new_ctx = Context.new_scope new_ctx
-              val (right_dec, new_ctx) = transform_dec (right_dec, new_ctx)
-            in
-              (* Pop penultimate, to get rid of the local stuff *)
-              ({left_dec=left_dec, right_dec=right_dec}, Context.pop_penultimate new_ctx)
-              |> expand_node_with_ctx Dlocal dec
-              |> mk_sing
-            end
-        | Dseq decs =>
+          Dseq decs =>
             fold_transform
               transform_dec
               ctx
@@ -330,54 +240,139 @@ structure Transform : TRANSFORM =
                   )
                   []
                 )
-        | Dinfix {precedence, ids} =>
-            let
-              val precedence = OptionMonad.value precedence 0
-              val new_ctx =
-                List.foldl
-                  (fn (id, ctx) =>
-                    Context.add_infix
-                      (SMLSyntax.id_to_string id)
-                      {assoc=Context.Left, precedence=precedence}
-                      ctx)
+        | _ =>
+            (case Node.getVal dec of
+              Dseq _ => raise Fail "literally impossible"
+            | Dval {recc, tyvars, valbinds} =>
+                fold_transform
+                  (fn ({pat, exp}, ctx) =>
+                    let
+                      val (pat, ctx) = transform_pat (pat, ctx)
+                      val (exp, ctx) = transform_exp (exp, ctx)
+                    in
+                      ({pat=pat, exp=exp}, ctx)
+                    end)
                   ctx
-                  ids
-            in
-              (dec, new_ctx)
-              |> mk_sing
-            end
-          | Dinfixr {precedence, ids} =>
-            let
-              val precedence = OptionMonad.value precedence 0
-              val new_ctx =
-                List.foldl
-                  (fn (id, ctx) =>
-                    Context.add_infix
-                      (SMLSyntax.id_to_string id)
-                      {assoc=Context.Right, precedence=precedence}
-                      ctx)
-                  ctx
-                  ids
-            in
-              (dec, new_ctx)
-              |> mk_sing
-            end
-          | Dnonfix ids =>
-            let
-              val new_ctx =
-                List.foldl
-                  (fn (id, ctx) => Context.remove_infix (SMLSyntax.id_to_string id) ctx)
-                  ctx
-                  ids
-            in
-              (dec, new_ctx)
-              |> mk_sing
-            end
-        | ( Ddatrepl _ (* TODO: datrepl deriving *)
-          | Dopen _
-          | Dempty ) =>
-              (dec, ctx)
-              |> mk_sing
+                  valbinds
+                ||> (fn valbinds => {recc=recc, tyvars=tyvars, valbinds=valbinds})
+                |> expand_node_with_ctx Dval dec
+            | Dfun {tyvars, fvalbinds} =>
+                let
+                  val (fvalbinds, ctx) = transform_fvalbinds (fvalbinds, ctx)
+                in
+                  ({tyvars=tyvars, fvalbinds=fvalbinds}, ctx)
+                  |> expand_node_with_ctx Dfun dec
+                end
+            | Dtype typbinds =>
+                transform_typbinds (typbinds, ctx)
+                |> expand_node_with_ctx Dtype dec
+
+            (* DERIVING STUFF HERE
+             * So, because we have to do code generation on the AST, we have to
+             * start at a higher granularity than just the `datbind` itself. So, we
+             * change any instance of a `Ddatdec`*)
+            | Ddatdec {datbinds, withtypee} =>
+                let
+                  val (datbinds, ctx) = transform_datbinds (datbinds, ctx)
+                  val (withtypee, ctx) =
+                    case withtypee of
+                      SOME typbinds =>
+                        let val (typbinds, ctx) = transform_typbinds (typbinds, ctx) in
+                          (SOME typbinds, ctx)
+                        end
+                    | NONE =>
+                        (NONE, ctx)
+                in
+                  ({datbinds=datbinds, withtypee=withtypee}, ctx)
+                  |> expand_node_with_ctx Ddatdec dec
+                end
+
+            | Dabstype {datbinds, withtypee, withh} =>
+                let
+                  val (datbinds, ctx) = transform_datbinds (datbinds, ctx)
+                  val (withtypee, ctx) =
+                    case withtypee of
+                      SOME typbinds =>
+                        let
+                          val (typbinds, ctx) = transform_typbinds (typbinds, ctx)
+                        in
+                          (SOME typbinds, ctx)
+                        end
+                    | NONE => (NONE, ctx)
+                  val (withh, ctx) = transform_dec (withh, ctx)
+                in
+                  ({datbinds=datbinds, withtypee=withtypee, withh=withh}, ctx)
+                  |> expand_node_with_ctx Dabstype dec
+                end
+
+            | Dexception exbinds =>
+                transform_exbinds (exbinds, ctx)
+                |> expand_node_with_ctx Dexception dec
+
+            | Dlocal {left_dec, right_dec} =>
+                let
+                  (* For the stuff declared in the `local` *)
+                  val new_ctx = Context.new_scope ctx
+                  val (left_dec, new_ctx) = transform_dec (left_dec, new_ctx)
+                  (* For the stuff declared in the `in` *)
+                  val new_ctx = Context.new_scope new_ctx
+                  val (right_dec, new_ctx) = transform_dec (right_dec, new_ctx)
+                in
+                  (* Pop penultimate, to get rid of the local stuff *)
+                  ( {left_dec=left_dec, right_dec=right_dec}
+                  , Context.pop_penultimate new_ctx)
+                  |> expand_node_with_ctx Dlocal dec
+                end
+
+            | Dinfix {precedence, ids} =>
+                let
+                  val precedence = Option.getOpt (precedence, 0)
+                  val new_ctx =
+                    List.foldl
+                      (fn (id, ctx) =>
+                        Context.add_infix
+                          (SMLSyntax.id_to_string id)
+                          {assoc=Context.Left, precedence=precedence}
+                          ctx)
+                      ctx
+                      ids
+                in
+                  (dec, new_ctx)
+                end
+
+            | Dinfixr {precedence, ids} =>
+              let
+                val precedence = Option.getOpt (precedence, 0)
+                val new_ctx =
+                  List.foldl
+                    (fn (id, ctx) =>
+                      Context.add_infix
+                        (SMLSyntax.id_to_string id)
+                        {assoc=Context.Right, precedence=precedence}
+                        ctx)
+                    ctx
+                    ids
+              in
+                (dec, new_ctx)
+              end
+
+            | Dnonfix ids =>
+              let
+                val new_ctx =
+                  List.foldl
+                    (fn (id, ctx) => Context.remove_infix (SMLSyntax.id_to_string id) ctx)
+                    ctx
+                    ids
+              in
+                (dec, new_ctx)
+              end
+
+            | ( Ddatrepl _ (* TODO: datrepl deriving *)
+              | Dopen _
+              | Dempty ) =>
+                  (dec, ctx)
+            )
+            |> Derive.codegen_dec
       end
     and transform_dec (dec, ctx) =
       case transform_dec' (dec, ctx) of
@@ -788,63 +783,52 @@ structure Transform : TRANSFORM =
     (* transform_spec turns a spec into one or more specs *)
     and transform_spec (spec, ctx) =
       let open SMLSyntax in
-        case Node.getVal spec of
-          SPval {id, ty} =>
-            transform_ty (ty, ctx)
-            ||> (fn ty => {id=id, ty=ty})
-            |> expand_node_with_ctx SPval spec
-            |> mk_sing
-        | SPtype typdesc =>
-            transform_typdesc (typdesc, ctx)
-            |> expand_node_with_ctx SPtype spec
-            |> Show.codegen_spec
-            |> fix_codegen
-        | SPeqtype typdesc =>
-            transform_typdesc (typdesc, ctx)
-            |> expand_node_with_ctx SPeqtype spec
-            |> Show.codegen_spec
-            |> fix_codegen
-        | SPdatdec {tyvars, tycon, condescs, deriving} =>
-            transform_condescs (condescs, ctx)
-            ||> (fn condescs =>
-                {tyvars=tyvars, tycon=tycon, condescs=condescs, deriving=deriving})
-            |> expand_node_with_ctx SPdatdec spec
-            |> Show.codegen_spec
-            |> fix_codegen
-        | SPexception {id, ty} =>
-            let
-              val (ty, ctx) =
-                case ty of
-                  NONE => (NONE, ctx)
-                | SOME ty => transform_ty (ty, ctx) ||> SOME
-            in
-              ({id=id, ty=ty}, ctx)
-            end
-            |> expand_node_with_ctx SPexception spec
-            |> mk_sing
-        | SPmodule {id, signat} =>
-            transform_signat (signat, ctx)
-            ||> (fn signat => {id=id, signat=signat})
-            |> expand_node_with_ctx SPmodule spec
-            |> mk_sing
-        | SPinclude signat =>
-            transform_signat (signat, ctx)
-            |> expand_node_with_ctx SPinclude spec
-            |> mk_sing
-        | SPsharing {specs, tycons} =>
-            List.foldl
-              (fn (spec, (specs, ctx)) =>
-                transform_spec (spec, ctx)
-                ||> (fn new_specs => specs @ new_specs))
-              ([], ctx)
-              specs
-            ||> (fn specs => {specs=specs, tycons=tycons})
-            |> expand_node_with_ctx SPsharing spec
-            |> mk_sing
-        | ( SPdatrepl _ ) =>
-            (spec, ctx)
-            |> Show.codegen_spec
-            |> fix_codegen
+        ( case Node.getVal spec of
+            SPval {id, ty} =>
+              transform_ty (ty, ctx)
+              ||> (fn ty => {id=id, ty=ty})
+              |> expand_node_with_ctx SPval spec
+          | SPtype typdesc =>
+              transform_typdesc (typdesc, ctx)
+              |> expand_node_with_ctx SPtype spec
+          | SPeqtype typdesc =>
+              transform_typdesc (typdesc, ctx)
+              |> expand_node_with_ctx SPeqtype spec
+          | SPdatdec {tyvars, tycon, condescs, deriving} =>
+              transform_condescs (condescs, ctx)
+              ||> (fn condescs =>
+                  {tyvars=tyvars, tycon=tycon, condescs=condescs, deriving=deriving})
+              |> expand_node_with_ctx SPdatdec spec
+          | SPexception {id, ty} =>
+              let
+                val (ty, ctx) =
+                  case ty of
+                    NONE => (NONE, ctx)
+                  | SOME ty => transform_ty (ty, ctx) ||> SOME
+              in
+                ({id=id, ty=ty}, ctx)
+              end
+              |> expand_node_with_ctx SPexception spec
+          | SPmodule {id, signat} =>
+              transform_signat (signat, ctx)
+              ||> (fn signat => {id=id, signat=signat})
+              |> expand_node_with_ctx SPmodule spec
+          | SPinclude signat =>
+              transform_signat (signat, ctx)
+              |> expand_node_with_ctx SPinclude spec
+          | SPsharing {specs, tycons} =>
+              List.foldl
+                (fn (spec, (specs, ctx)) =>
+                  transform_spec (spec, ctx)
+                  ||> (fn new_specs => specs @ new_specs))
+                ([], ctx)
+                specs
+              ||> (fn specs => {specs=specs, tycons=tycons})
+              |> expand_node_with_ctx SPsharing spec
+          | ( SPdatrepl _ ) =>
+              (spec, ctx)
+        )
+        |> Derive.codegen_spec
       end
 
     (* when entering a module, push a new scope

@@ -2,6 +2,10 @@ Group
   structure Top
 is
   $/basis.cm
+
+  ../utils/sources.cm
+
+  ../cm_parser/sources.cm
   ../parse/sources.cm
   top.sml
 

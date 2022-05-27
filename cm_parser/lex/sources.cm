@@ -1,0 +1,10 @@
+Group
+  structure CM_Lexer
+is
+  ../../cmlib/cmlib.cm
+  ../../utils/sources.cm
+
+  ../syntax/sources.cm
+
+  lexer.fun
+  lexer.sml

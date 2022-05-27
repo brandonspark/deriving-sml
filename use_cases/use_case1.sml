@@ -1,7 +1,7 @@
 
 datatype t =
     One
-  | Two [.deriving show]
+  | Two [.deriving show, eq]
 
 val y = show_t One
 

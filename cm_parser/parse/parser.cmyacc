@@ -1,0 +1,20 @@
+sml
+name ParserFun
+
+terminal ELEM of elem
+
+terminal LIBRARY of span
+terminal GROUP of span
+terminal IS of span
+
+terminal EOF of span
+
+nonterminal Files : files =
+  EOF => nil_files
+  1:ELEM 2:Files => cons_files
+
+nonterminal Main : main =
+  GROUP IS 1:Files => main_prog
+  LIBRARY IS 1:Files => main_prog
+
+start Main

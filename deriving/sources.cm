@@ -1,11 +1,20 @@
 Group
-  structure Show
+  structure Derive
 is
+  ../cmlib/cmlib.cm
+  ../utils/sources.cm
+
   ../syntax/sources.cm
   ../lex/sources.cm
 
   temp_id.sml
 
-  deriving.sig
+  plugin.sig
+  prelude.sml
 
   show.sml
+  eq.sml
+  compare.sml
+  map.sml
+
+  derive.sml

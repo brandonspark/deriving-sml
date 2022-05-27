@@ -1,63 +1,25 @@
 
-structure Show : DERIVING =
+structure Show : PLUGIN =
   struct
-    open SMLSyntax
+    open Prelude
 
+    infix $
     infix |>
-    fun x |> f = f x
 
-    val x = mk_id "x"
-
-    val new = TempId.new
-
-    local
-      fun change_last f l =
-        case l of
-          [] => raise Fail "changing last on empty list"
-        | [x] => [f x]
-        | x::xs =>
-            let
-              val res = change_last f xs
-            in
-              x::res
-            end
-    in
-      fun long_ty_to_show longid =
-        case longid of
-          [] => raise Fail "impossible, long_ty_to_show on empty id"
-        | _ =>
-            change_last
-              (fn node =>
-                Node.map (fn sym => map_sym sym (fn s => s ^ "_show")) node
-              )
-              longid
-    end
-
-    fun promote x = Node.create (x, Span.absurd)
-
-    val old_pident = Pident
-    fun Pident id = promote (old_pident {opp = false, id = id})
-    val old_eident = Eident
-    fun Eident ids = promote (old_eident {opp = false, id = ids})
-    val old_estring = Estring
-    fun Estring id = promote (old_estring (Symbol.fromValue id))
-    val old_eapp = Eapp
-    fun Eapp {left, right} =
-      promote (old_eapp {left = left, right = right})
-    val old_papp = Papp
-    fun Papp x = promote (old_papp x)
-    val old_pconstr = Pconstr
-    fun Pconstr x = promote (old_pconstr {opp = false, id = [x]})
-
-    val old_eif = Eif
-    fun Eif x = promote (old_eif x)
-    val old_efn = Efn
-    fun Efn x = promote (old_efn x)
+    fun long_ty_to_show longid =
+      case longid of
+        [] => raise Fail "impossible, long_ty_to_show on empty id"
+      | _ =>
+          change_last
+            (fn node =>
+              Node.map (fn sym => map_sym sym (fn s => s ^ "_show")) node
+            )
+            longid
 
     infix ^^
     fun x ^^ y =
       Eapp { left = Eident [mk_id "op^"]
-           , right = promote (Etuple [x, y])
+           , right = Etuple [x, y]
            }
 
     fun ty_to_code get_tyvar_fn ty ctx (type_name : identifier option) =
@@ -71,20 +33,17 @@ structure Show : DERIVING =
         fun mk_toString id = Eident [mk_id id, mk_id "toString"]
 
         fun use_show longid id =
-          Eapp { left = Eident (long_ty_to_show longid)
-               , right = Eident [id]
-               }
+            Eident (long_ty_to_show longid)
+          $ Eident [id]
       in
         case Node.getVal ty of
-          Tident [ty_id] =>
+          SMLSyntax.Tident [ty_id] =>
             ( Pident id
             , (* Special cases for showing any base types.
                *)
               case id_to_string ty_id of
                 "int" =>
-                  Eapp { left = mk_toString "Int"
-                       , right = Eident [id]
-                       }
+                  mk_toString "Int" $ Eident [id]
               | "string" =>
                   (* Since this is producing source code, we have to account for
                    * the backslashes needed to escape in the produced code.
@@ -93,14 +52,10 @@ structure Show : DERIVING =
                    *)
                   Estring "\\\"" ^^ Eident [id] ^^ Estring "\\\""
               | "real" =>
-                  Eapp { left = mk_toString "Real"
-                       , right = Eident [id]
-                       }
+                  mk_toString "Real" $ Eident [id]
               | "char" =>
                   Estring "#\\\""
-               ^^ Eapp { left = mk_toString "Char"
-                       , right = Eident [id]
-                      }
+               ^^ (mk_toString "Char" $ Eident [id])
                ^^ Estring "\\\""
               | "bool" =>
                   Eif { exp1 = Eident [id]
@@ -139,7 +94,7 @@ structure Show : DERIVING =
 
         (* Just use the show function for a modular type.
          *)
-        | Tident longty => (Pident id, use_show longty id)
+        | SMLSyntax.Tident longty => (Pident id, use_show longty id)
 
         (* Suppose we're codegen-ing for something like:
          * 'a
@@ -149,17 +104,15 @@ structure Show : DERIVING =
          * tyvar's index.
          * (if we were deriving on an ('a, 'b) t, this index would be 0)
          *)
-        | Ttyvar tyvar =>
+        | SMLSyntax.Ttyvar tyvar =>
             ( Pident id
-            , Eapp { left = get_tyvar_fn tyvar
-                   , right = Eident [id]
-                   }
+            , get_tyvar_fn tyvar $ Eident [id]
             )
 
         (* For polymorphic functions, get the right show function and pass it the
          * show functions for the instantiated tyargs.
          *)
-        | Tapp (tys, longid) =>
+        | SMLSyntax.Tapp (tys, longid) =>
             let
               (* For a list of types, get all the corresponding functions to
                * print them, and pass them to a desired expression.
@@ -169,16 +122,13 @@ structure Show : DERIVING =
                   (fn ty => ty_to_code get_tyvar_fn ty ctx type_name)
                   tys
               fun add_printing_fns exp =
-                Eapp { left = List.foldl
-                                (fn ((pat, exp), acc) =>
-                                  Eapp { left = acc
-                                       , right = Efn [{pat = pat, exp = exp}]
-                                       }
-                                )
-                                exp
-                                codegen_tys
-                     , right = Eident [id]
-                     }
+                  List.foldl
+                    (fn ((pat, exp), acc) =>
+                      acc $ Efn [{pat = pat, exp = exp}]
+                    )
+                    exp
+                    codegen_tys
+                $ Eident [id]
 
             in
               ( Pident id
@@ -190,23 +140,14 @@ structure Show : DERIVING =
                       ([(pat, exp)], "list") =>
                         let
                           val map_fn =
-                            Eapp { left = Eident [mk_id "List", mk_id "map"]
-                            , right = Efn [{pat = pat, exp = exp}]
-                            }
+                            Eident [mk_id "List", mk_id "map"] $ Efn [{pat = pat, exp = exp}]
                           val comma_separate =
-                            Eapp { left = Eident [mk_id "String", mk_id "concatWith"]
-                                 , right = Estring ", "
-                                 }
+                            Eident [mk_id "String", mk_id "concatWith"] $ Estring ", "
                         in
                           (* "[" ^ String.concatWith ", " (List.map f id) ^ "]"
                            *)
                              Estring "["
-                          ^^ Eapp { left = comma_separate
-                                  , right =
-                                      Eapp { left = map_fn
-                                           , right = Eident [id]
-                                           }
-                                  }
+                          ^^ (comma_separate $ (map_fn $ Eident [id]))
                           ^^ Estring "]"
                         end
                     | ([(pat, exp)], "option") =>
@@ -221,9 +162,7 @@ structure Show : DERIVING =
                                                  , atpat = Pident (mk_id "x")
                                                  }
                                     , exp = Estring "SOME ("
-                                         ^^ Eapp { left = Efn [{pat = pat, exp = exp}]
-                                                 , right = Eident [mk_id "x"]
-                                                 }
+                                         ^^ (Efn [{pat = pat, exp = exp}] $ Eident [mk_id "x"])
                                          ^^ Estring ")"
                                     }
                                   ]
@@ -238,19 +177,19 @@ structure Show : DERIVING =
             end
 
         (* Functions are unprintable. *)
-        | Tarrow (ty1, ty2) =>
+        | SMLSyntax.Tarrow (ty1, ty2) =>
             (promote Pwild, Estring "<fn>")
 
         (* For product types, codegen the components and combine.
          *)
-        | Tprod tys =>
+        | SMLSyntax.Tprod tys =>
             let
               val codegen_tys =
                 List.map
                   (fn ty => ty_to_code get_tyvar_fn ty ctx type_name)
                   tys
             in
-              ( promote (Ptuple (List.map #1 codegen_tys))
+              ( Ptuple (List.map #1 codegen_tys)
               , List.foldl
                   (fn ((_, exp), NONE) => SOME exp
                   | ((_, exp), SOME acc) =>
@@ -266,7 +205,7 @@ structure Show : DERIVING =
 
         (* For record types, codegen the components and combine.
          *)
-        | Trecord fields =>
+        | SMLSyntax.Trecord fields =>
             let
               val codegen_tys =
                 List.map
@@ -298,47 +237,19 @@ structure Show : DERIVING =
             end
       end
 
-    (* This function associates the tyvars to the desired patterns, indexed by
-     * tyvar, and then also a function which produces the right name from the
-     * right tyvar.
-     *)
-    fun tyvars_to_fns tyvars =
-      let
-        val enum_tyvars = List.mapi Fn.id tyvars
-
-        (* This function associates a tyvar to an index in the datatype *)
-        fun get_tyvar_fn tyvar =
-          case
-            List.find (fn (idx, tyvar') =>
-              Node.location_insensitive_eq Symbol.eq (tyvar, tyvar')
-            ) enum_tyvars
-          of
-            NONE => raise Fail "unable to print tyvar"
-          | SOME (idx, _) =>
-              Eident [mk_id ("fn" ^ Int.toString idx)]
-
-        (* All of the patterns we'll need for the function clause.
-         * fun f fn1 fn2 fn3 ... =
-         *)
-        val fn_pats =
-          List.map
-            (fn (idx, _) => Pident (mk_id ("fn" ^ Int.toString idx)))
-            enum_tyvars
-      in
-        (fn_pats, get_tyvar_fn)
-      end
-
     fun from_ty ty =
-      (* TODO: doesn't allow any type variables, but could allow to produce a
-       * "partially instantiated" show function
-       *)
-      ty_to_code
-        (fn _ => raise Fail "no top-level tyvars in show")
-        ty
-        (* TODO: this only works because context is currently unused
-         *)
-        (Context.init)
-        NONE
+      let
+        val (fn_pats, get_tyvar_fn) = get_tyvar_info ty
+      in
+        ty_to_code
+          get_tyvar_fn
+          ty
+          (* TODO: this only works because context is currently unused
+           *)
+          (Context.init)
+          NONE
+        |> (fn (x, y) => (fn_pats @ [x], y))
+      end
 
     (* Check if a `deriving` actually has a `show`
      *)
@@ -365,9 +276,7 @@ structure Show : DERIVING =
             , id = mk_id (s ^ "_show")
             , pats = [Pident x]
             , ty = NONE
-            , exp = Eapp { left = Eident [mk_id ("show_" ^ s)]
-                         , right = Eident [x]
-                         }
+            , exp = Eident [mk_id ("show_" ^ s)] $ Eident [x]
             }
           ]
         ]
@@ -443,7 +352,7 @@ structure Show : DERIVING =
           mk_fundec mk_show_fvalbind tycon
         end
 
-    fun add_init (init, ctx) x = (init::x, ctx)
+    fun add_ctx ctx x = (x, ctx)
 
     fun codegen_dec (dec, ctx) =
       let
@@ -455,7 +364,6 @@ structure Show : DERIVING =
                       }
                  ]
       in
-        add_init (Node.getVal dec, ctx)
         ( case Node.getVal dec of
           Ddatdec { datbinds, withtypee } =>
             (* Collect a list of all of the different function val binds, which
@@ -522,17 +430,8 @@ structure Show : DERIVING =
           | Dinfix _
           | Dinfixr _
           | Dnonfix _ ) => []
-        )
+        ) |> add_ctx ctx
       end
-
-    val old_tident = Tident
-    fun Tident x = promote (old_tident x)
-    val old_tapp = Tapp
-    fun Tapp x = promote (old_tapp x)
-    val old_ttyvar = Ttyvar
-    fun Ttyvar x = promote (old_ttyvar x)
-    val old_tarrow = Tarrow
-    fun Tarrow x = promote (old_tarrow x)
 
     fun codegen_spec (spec, ctx) =
       let
@@ -546,7 +445,6 @@ structure Show : DERIVING =
           ]
 
       in
-        add_init (Node.getVal spec, ctx)
         ( case Node.getVal spec of
           SPtype {tyvars, tycon, ty = tyopt, deriving} =>
             if not (verify_deriving deriving) then
@@ -605,6 +503,6 @@ structure Show : DERIVING =
           | SPinclude _
           | SPsharing _
           | SPval _ ) => []
-        )
+        ) |> add_ctx ctx
     end
   end

@@ -1,22 +1,14 @@
 Group
-  structure Node
-  structure Token
-  structure Lexer
-  structure SMLSyntax
-  structure StrDict
-
   structure Parser
   structure PrettyPrintAst
 is
-  ../lex/sources.cm
+  ../cmlib/cmlib.cm
   ../utils/sources.cm
 
   ../syntax/sources.cm
+  ../lex/sources.cm
 
   ../deriving/sources.cm
-
-  dict.sml
-  scoped_dict.sml
 
   precedence.sml
   transform.sml

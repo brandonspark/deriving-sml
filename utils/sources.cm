@@ -4,16 +4,27 @@ Group
   structure Common
   structure Pair
 
-  structure OptionMonad
   structure TerminalColors
+
+  structure Node
+  structure Span
+  structure Error
+
+  library(../cmlib/cmlib.cm) - structure CommandLine
+                             - signature CONT
+                             - signature SUSP
+                             - signature WEAK
+                             - signature COMMAND_LINE
 is
+  ../cmlib/cmlib.cm
+
   ListUtils.sml
   PrettySimpleDoc.sml
   Common.sml
   Pair.sml
 
-  MONAD.sig
-  OptionMonad.sml
-
   TerminalColors.sml
-  ../cmlib/cmlib.cm
+
+  span.sml
+  node.sml
+  error.sml

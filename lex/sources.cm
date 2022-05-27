@@ -1,22 +1,10 @@
 Group
-  structure Node
-  structure Span
-  structure Symbol
-  structure Error
-
-  structure Token
   structure Lexer
-
-  library(../cmlib/cmlib.cm)
 is
   ../utils/sources.cm
   ../cmlib/cmlib.cm
 
-  node.sml
-  span.sml
-  error.sml
-  symbol.sml
+  ../syntax/sources.cm
 
-  token.sml
   lexer.fun
   lexer.sml

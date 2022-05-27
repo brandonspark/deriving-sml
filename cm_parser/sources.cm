@@ -1,0 +1,7 @@
+Group
+  structure CM_Token
+  structure CM_Parser
+is
+  syntax/sources.cm
+
+  parse/sources.cm

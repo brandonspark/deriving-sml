@@ -1,12 +1,13 @@
 
-(* DERIVING is the signature for a deriving plugin.
+(* PLUGIN is the signature for a deriving plugin.
  * It produces a certain number of:
  * - declarations
  * - specifications
  * from deriving annotations.
+ * It also details how to produce an in-place expression from a deriving thing.
  *)
 
-signature DERIVING =
+signature PLUGIN =
   sig
 
     (* Both of these are used during the program transformation stage.
@@ -17,6 +18,6 @@ signature DERIVING =
     (* Need to expose this, because we use this at the rewriting step during
      * parsing.
      *)
-    val from_ty : SMLSyntax.ty -> SMLSyntax.pat * SMLSyntax.exp
+    val from_ty : SMLSyntax.ty -> SMLSyntax.pat list * SMLSyntax.exp
 
   end

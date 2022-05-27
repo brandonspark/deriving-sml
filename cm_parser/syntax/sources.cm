@@ -1,0 +1,6 @@
+Group
+  structure CM_Token
+is
+  ../../utils/sources.cm
+
+  token.sml
