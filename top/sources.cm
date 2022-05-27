@@ -1,12 +1,16 @@
 Group
+  structure StringRedBlackSet
+
   structure CM_Token
   structure CM_Parser
 
+  structure Token
   structure Parser
   structure PrettyPrintAst
 
   structure Node
   structure Symbol
+  structure Error
 
   structure Top
 is

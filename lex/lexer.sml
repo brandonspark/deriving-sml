@@ -10,6 +10,7 @@ structure Lexer :> LEXER =
   struct
     open Span
     open Token
+    open Error
 
     structure Table = SymbolHashTable
 
@@ -119,7 +120,7 @@ structure Lexer :> LEXER =
         loop (String.explode str)
       end
 
-    fun identify table str span =
+    fun identify table str span follow =
       let
         val sym = Symbol.fromValue str
       in
@@ -137,19 +138,25 @@ structure Lexer :> LEXER =
                   SIDENT (Node.create (sym, span))
               end
             else
-              raise Error.SyntaxError ("illegal identifier", #1 span)
+              err
+                (LexError
+                  { reason = "illegal identifier"
+                  , pos = #1 span
+                  , rest = Stream.toList follow
+                  }
+                )
 
         | SOME tokfn =>
              tokfn span)
       end
 
-    fun longIdentify table acc curr currstart pos l =
+    fun longIdentify table acc curr currstart pos l follow =
      (case l of
          [] =>
             (* The lexer ensures that the longid is nonempty, and longIdentify
                never calls itself recursively with curr=nil, so curr is not nil here.
             *)
-            rev (identify table (implode (rev curr)) (currstart, pos)
+            rev (identify table (implode (rev curr)) (currstart, pos) follow
                  :: acc)
 
        | #"." :: rest =>
@@ -160,7 +167,7 @@ structure Lexer :> LEXER =
              *)
              val acc =
                 DOT (pos, pos+1)
-                :: identify table (implode (rev curr)) (currstart, pos)
+                :: identify table (implode (rev curr)) (currstart, pos) follow
                 :: acc
           in
              (case rest of
@@ -172,19 +179,20 @@ structure Lexer :> LEXER =
 
                | ch :: rest' =>
                     if Char.isAlpha ch then
-                       longIdentify table acc [ch] (pos+1) (pos+2) rest'
+                       longIdentify table acc [ch] (pos+1) (pos+2) rest' follow
                     else
                        (* The lexer ensures that the remaining characters are all symbols. *)
                        let
                           val str = implode rest
                        in
-                          rev (identify table str (pos+1, pos+1 + size str)
+                          rev (identify table str (pos+1, pos+1 + size str) follow
                                :: acc)
                        end)
           end
 
        | ch :: rest =>
-          longIdentify table acc (ch :: curr) currstart (pos+1) rest)
+          longIdentify table acc (ch :: curr) currstart (pos+1) rest follow
+        )
 
 
     open Stream
@@ -213,7 +221,7 @@ structure Lexer :> LEXER =
                       self : self }
 
         fun action f ({ match, len, follow, self, ...}: info) (k as LEX cont) pos =
-          Cons (f (match, len, pos), lazy (fn () => cont follow k (pos + len)))
+          Cons (f (match, len, pos, follow), lazy (fn () => cont follow k (pos + len)))
 
         fun simple tokfn ({ match, len, follow, self, ...}: info) (k as LEX cont) pos =
           Cons (tokfn (pos, pos + len), lazy (fn () => cont follow k (pos + len)))
@@ -223,27 +231,35 @@ structure Lexer :> LEXER =
 
         val main_ident =
           action
-          (fn (match, len, pos) => identify sml_keywords (implode match) (pos, pos +
-          len))
+          (fn (match, len, pos, follow) => identify sml_keywords (implode match) (pos, pos +
+          len) follow)
 
         fun main_longid ({match, len, follow, self, ...}:info) (k as LEX cont) pos =
           front
-          (Stream.@ (Stream.fromList (longIdentify sml_keywords [] [] pos pos match),
+          (Stream.@ (Stream.fromList (longIdentify sml_keywords [] [] pos pos match follow),
                      lazy (fn () => cont follow k (pos + len))))
 
 
         val tyvar =
           action
-          (fn (match, len, pos) =>
+          (fn (match, len, pos, _) =>
             TYVAR (Node.create (Symbol.fromValue (implode match), (pos, pos + len))))
 
         fun mk_number f =
           action
-          (fn (match, len, pos) =>
-            (case f (implode match) of
-              SOME n => NUMBER (Node.create (n, (pos, pos + len)))
-            | NONE =>
-                raise SyntaxError ("illegal number", pos)))
+            (fn (match, len, pos, follow) =>
+              (case f (implode match) of
+                SOME n => NUMBER (Node.create (n, (pos, pos + len)))
+              | NONE =>
+                  err
+                    ( LexError
+                        { reason = "illegal number"
+                        , pos = pos
+                        , rest = Stream.toList follow
+                        }
+                    )
+              )
+            )
 
         val number = mk_number Int.fromString
         val nnumber = mk_number Int.fromString
@@ -254,17 +270,26 @@ structure Lexer :> LEXER =
 
         val wordlit =
           action
-          (fn (match, len, pos) =>
-            (case List.drop (match, 2) of
-              #"x"::rest => WORD (Node.create (implode rest, (pos, pos + len)))
-            | other => WORD (Node.create (implode other, (pos, pos + len)))))
+            (fn (match, len, pos, _) =>
+              (case List.drop (match, 2) of
+                #"x"::rest => WORD (Node.create (implode rest, (pos, pos + len)))
+              | other => WORD (Node.create (implode other, (pos, pos + len)))))
 
         val reallit =
           action
-          (fn (match, len, pos) =>
-            (case Real.fromString (implode match) of
-              SOME n => REAL (Node.create (n, (pos, pos + len)))
-            | NONE => raise SyntaxError ("illegal real", pos)))
+            (fn (match, len, pos, follow) =>
+              (case Real.fromString (implode match) of
+                SOME n => REAL (Node.create (n, (pos, pos + len)))
+              | NONE =>
+                    err
+                      ( LexError
+                          { reason = "illegal real"
+                          , pos = pos
+                          , rest = Stream.toList follow
+                          }
+                      )
+              )
+            )
 
         fun enter_comment ({len, follow, self, ...}: info) (k as LEX cont) pos =
           let
@@ -308,7 +333,13 @@ structure Lexer :> LEXER =
                 Cons (CHAR (Node.create (ch, (pos, pos'))),
                       lazy (fn () => cont follow' k pos'))
             | _ =>
-                raise SyntaxError ("illegal character constant", pos)
+                err
+                  (LexError
+                    { reason = "illegal character constant"
+                    , pos = pos
+                    , rest = Stream.toList follow
+                    }
+                  )
           end
 
         val lparen = simple LPAREN
@@ -322,14 +353,19 @@ structure Lexer :> LEXER =
 
         val semicolon =
           action
-          (fn (_, len, pos) =>  SEMICOLON (pos, pos+len))
+          (fn (_, len, pos, _) =>  SEMICOLON (pos, pos+len))
 
         fun eof _ _ pos =
           Cons (EOF (pos, pos), eager Nil)
 
         fun error ({follow, ...}: info) _ pos =
-          (print ((String.implode (Stream.toList follow)) ^ "\n");
-           raise SyntaxError ("illegal lexeme", pos))
+          err
+            (LexError
+              { reason = "illegal lexeme"
+              , pos = pos
+              , rest = Stream.toList follow
+              }
+            )
 
         (* comment *)
 
@@ -346,9 +382,24 @@ structure Lexer :> LEXER =
         fun comment_skip ({ len, follow, self, ...} : info) pos =
           #comment self follow (pos + len)
 
-        fun unclosed_comment _ pos = raise SyntaxError ("unclosed comment", pos)
+        fun unclosed_comment ({follow, ...}: info) pos =
+          err
+            (LexError
+              { reason = "unclosed comment"
+              , pos = pos
+              , rest = Stream.toList follow
+              }
+            )
 
-        fun comment_error _ pos = raise SyntaxError ("illegal character", pos)
+        fun comment_error ({follow, ...}: info) pos =
+          err
+            (LexError
+              { reason = "illegal character in comment"
+              , pos = pos
+              , rest = Stream.toList follow
+              }
+            )
+
 
 
         (* string *)
@@ -394,10 +445,23 @@ structure Lexer :> LEXER =
         fun exit_string ({ len, follow, ... }:info) pos acc =
           (acc, follow, pos+len)
 
-        fun unclosed_string _ pos _ = raise (SyntaxError ("unclosed string", pos))
+        fun unclosed_string ({follow, ...}: info) pos =
+          err
+            (LexError
+              { reason = "unclosed string"
+              , pos = pos
+              , rest = Stream.toList follow
+              }
+            )
 
-        fun string_error _ pos _ = raise (SyntaxError ("illegal character", pos))
-
+        fun string_error ({follow, ...}: info) pos =
+          err
+            (LexError
+              { reason = "illegal character in string"
+              , pos = pos
+              , rest = Stream.toList follow
+              }
+            )
       end
 
     structure Input =

@@ -1,2 +1,0 @@
-Skeleton 5
-d4f±дўSMLSyntax"aгўTRANSFORM"и0ac"PATH"яad"Transform"jh5Cезряegp1d"Common"f4d"ScopeDict"d"Pair"дўList"дўNode"bя:f3яЃ!яЃ(дўDerive"bя:f2яЃ!яЃ(CbдІя:ж±яЃ(f1дўFn"bя‚f2я‚яЃ(bя:f4d"PatPrecedence"ядўContext"яЃ(bя:ж0bя:f4d"ExpPrecedence"яяѓяЃ(Cя‚bя:f6яCяЃ!d"Option"яѓяЃ(яЃ:Nвя:жІяѓяЃ(я„bd2я:f1яѓяѓNgp1я

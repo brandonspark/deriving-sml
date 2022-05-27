@@ -1,4 +1,3 @@
-
 signature COMMON =
   sig
     val apply : 'a -> ('a -> 'b) -> 'b

@@ -1,4 +1,3 @@
-
 datatype t =
     One
   | Two [.deriving show, eq]

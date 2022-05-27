@@ -1,3 +1,4 @@
+
 type result = SMLSyntax.ast * Token.token list
 signature PARSER =
   sig
@@ -17,6 +18,7 @@ signature PARSER =
 structure Parser :> PARSER =
   struct
     open SMLSyntax
+    open Error
 
     type span = Span.span
 
@@ -132,7 +134,23 @@ structure Parser :> PARSER =
         fun some_deriving (name, plugins) =
           case Symbol.toValue (Node.getVal name) of
             "deriving" => SOME plugins
-          | _ => raise Fail "expected \"deriving\""
+          | s =>
+              err
+                (ExpectedIdent
+                  { expected = "deriving"
+                  , got = s
+                  , span =
+                      case plugins of
+                        [] => Node.getSpan name
+                      | _ =>
+                        Span.join
+                          (Node.getSpan name)
+                          (case ListUtils.last plugins of
+                            (id, []) => Node.getSpan id
+                          | (_, l) => Node.getSpan ((fn (_, y) => y) (ListUtils.last l))
+                          )
+                  }
+                )
 
         (***************)
         (* EXP SECTION *)
@@ -426,6 +444,11 @@ structure Parser :> PARSER =
               [] => Node.create (Punit, Span.join left right)
             | [x] => raise Fail "impossible - singular tuple pat"
             | _ => Node.create (Ptuple patseq, Span.join left right)
+          fun or_pat {left, orpat, right} =
+            case orpat of
+              [] => raise Fail "impossible, empty orpat"
+            | [_] => raise Fail "impossible, single orpat"
+            | _ => Node.create (Por orpat, Span.join left right)
           fun list_pat {left, patseq, right} =
             Node.create (Plist patseq, Span.join left right)
           val sing_atpats = sing
@@ -868,9 +891,12 @@ structure Parser :> PARSER =
             Node.create
               ( Mseal {module=module, opacity=Opaque, signat=signat}
               , Node.join_span module signat )
-          fun app_module {id, module} =
-            Node.create ( Mapp {functorr=id, module=module}
-                        , Node.join_span id module )
+          fun app_module {id, module, right} =
+            Node.create ( Mapp {functorr=id, arg=Normal_app module}
+                        , Node.join_spanr id right )
+          fun app_module_sugar {id, strdec, right} =
+            Node.create ( Mapp {functorr=id, arg=Sugar_app strdec}
+                        , Node.join_spanr id right )
           fun let_module {left, dec, module, right} =
             Node.create ( Mlet {dec=dec, module=module}
                         , Span.join left right )
@@ -951,16 +977,43 @@ structure Parser :> PARSER =
           fun mk_sigdec {left, sigbinds: sigbinds} =
             Node.create (sigbinds, Node.join_spanl left ((#signat o ListUtils.last) sigbinds))
 
+          datatype funarg = datatype funarg
+          val normal_funarg = Normal
+          val sugar_funarg = Sugar
+
           type funbind = {
             id : identifier,
-            arg_id : identifier,
-            signat : signat,
+            funarg : funarg,
+            seal : { signat : signat, opacity : opacity } option,
             body : module
           } Node.t
           type funbinds = funbind list
           type fundec = funbinds Node.t
-          fun mk_funbind (input as {id, arg_id, signat, body}) =
-            Node.create ( input, Node.join_span id body )
+          fun bare_funbind (input as {id, funarg, body}) =
+            Node.create
+              ( { id = id
+                , funarg = funarg
+                , seal = NONE
+                , body = body }
+              , Node.join_span id body
+              )
+          fun transparent_funbind (input as {id, funarg, signat, body}) =
+            Node.create
+              ( { id = id
+                , funarg = funarg
+                , seal = SOME { signat = signat, opacity = Transparent }
+                , body = body }
+              , Node.join_span id body
+              )
+          fun opaque_funbind (input as {id, funarg, signat, body}) =
+            Node.create
+              ( { id = id
+                , funarg = funarg
+                , seal = SOME { signat = signat, opacity = Opaque }
+                , body = body }
+              , Node.join_span id body
+              )
+>>>>>>> 2a2d23f (can parse all files except cmlib now)
           val sing_funbinds = sing
           val cons_funbinds = op ::
 
@@ -1017,11 +1070,11 @@ structure Parser :> PARSER =
 
     fun parse_file_to_string s =
       case parse_file s of
-        Either.INL _ => raise Fail "Failed to parse!"
+        Either.INL strs => Error.err (Error.ParseError (s, strs))
       | Either.INR (ast, _) => PrettyPrintAst.pretty ast true
 
     fun parse_file_transformed_to_string s =
       case parse_file s of
-        Either.INL _ => raise Fail "Failed to parse!"
+        Either.INL strs => Error.err (Error.ParseError (s, strs))
       | Either.INR (ast, _) => PrettyPrintAst.pretty (Transform.transform ast) true
   end

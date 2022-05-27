@@ -29,6 +29,7 @@ structure Transform : TRANSFORM =
   struct
     open SMLSyntax
     open Common
+    open Error
 
     (* Transform is set up such that the canonical form of values is a tuple,
      * where the first projection is whatever part of the AST we are interested
@@ -142,10 +143,17 @@ structure Transform : TRANSFORM =
               ({module=module, opacity=opacity, signat=signat}, ctx)
               |> expand_node_with_ctx Mseal module
             end
-        | Mapp {functorr, module} =>
-            transform_module (module, ctx)
-            ||> (fn module => {functorr=functorr, module=module})
-            |> expand_node_with_ctx Mapp module
+        | Mapp {functorr, arg} =>
+            ( case arg of
+              Normal_app modid =>
+                transform_module (modid, ctx)
+                ||> (fn module => {functorr=functorr, arg=Normal_app module})
+                |> expand_node_with_ctx Mapp module
+            | Sugar_app strdec =>
+                transform_strdec (strdec, ctx)
+                ||> (fn strdec => {functorr=functorr, arg=Sugar_app strdec})
+                |> expand_node_with_ctx Mapp module
+            )
         | Mlet {dec, module} =>
             (* TODO: this does not seem right *)
             let
@@ -549,11 +557,23 @@ structure Transform : TRANSFORM =
             end
         | Eident {opp=false, id} =>
             (case Context.lookup_infix (longid_to_string id) ctx of
-              SOME _ => raise Fail "exp ident is infix"
+              SOME _ =>
+                err
+                  (FixityError
+                    { reason = "lone infix identifier without `op`"
+                    , span = Node.getSpan (ListUtils.last id)
+                    }
+                  )
             | _ => (exp, ctx))
         | Econstr {opp=false, id} =>
             (case Context.lookup_infix (longid_to_string id) ctx of
-              SOME _ => raise Fail "exp constr is infix"
+              SOME _ =>
+                err
+                  (FixityError
+                    { reason = "lone infix constructor without `op`"
+                    , span = Node.getSpan (ListUtils.last id)
+                    }
+                  )
             | _ => (exp, ctx))
         | ( Enumber _
           | Estring _
@@ -619,7 +639,13 @@ structure Transform : TRANSFORM =
               transform_pat
               ctx
               pats
-            |> expand_node_with_ctx Ptuple pat
+            |> expand_node_with_ctx Plist pat
+        | Por pats =>
+            fold_transform
+              transform_pat
+              ctx
+              pats
+            |> expand_node_with_ctx Por pat
         | Papp {id, atpat} =>
             transform_pat (atpat, ctx)
             ||> (fn atpat => {id=id, atpat=atpat})
@@ -700,12 +726,30 @@ structure Transform : TRANSFORM =
         fold_transform
           (fn (funbind_node, ctx) =>
             let
-              val {id, arg_id, signat, body} = Node.getVal funbind_node
-              val (signat, ctx) = transform_signat (signat, ctx)
+              val {id, funarg, seal, body} = Node.getVal funbind_node
+              val (funarg, ctx) =
+                case funarg of
+                  Normal {id, signat} =>
+                    transform_signat (signat, ctx)
+                    ||> (fn signat => Normal {id = id, signat = signat})
+                | Sugar specs =>
+                    List.foldl
+                      (fn (spec, (specs, ctx)) =>
+                        transform_spec (spec, ctx)
+                        ||> (fn new_specs => specs @ new_specs))
+                      ([], ctx)
+                      specs
+                    ||> (fn specs => Sugar specs)
+              val (seal, ctx) =
+                case seal of
+                  NONE => (NONE, ctx)
+                | SOME {signat, opacity} =>
+                    transform_signat (signat, ctx)
+                    ||> (fn signat => SOME {signat = signat, opacity = opacity})
               val (body, ctx) = transform_module (body, ctx)
             in
               (Node.map
-                (Fn.const {id=id, arg_id=arg_id, signat=signat, body=body})
+                (Fn.const {id=id, funarg = funarg, seal=seal, body=body})
                 funbind_node, ctx)
             end)
           ctx

@@ -26,7 +26,7 @@ signature SCOPED_DICT =
 
 functor ScopedDict (KeyDict : DICT) :>
   SCOPED_DICT where type key = KeyDict.key
-                and type 'a dict = 'a KeyDict.dict =
+              where type 'a dict = 'a KeyDict.dict =
   struct
     structure KeyDict = KeyDict
 

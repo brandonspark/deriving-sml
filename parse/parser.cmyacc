@@ -191,23 +191,6 @@ nonterminal Expseq : exps =
   1:Exp SEMICOLON 2:Exp              => pair_exps
   1:Exp SEMICOLON 2:Expseq           => cons_exps
 
-nonterminal Atexp : exp =
-  1:NUMBER                                                   => num_exp
-  1:WORD                                                     => word_exp
-  1:REAL                                                     => real_exp
-  1:STRING                                                   => str_exp
-  1:CHAR                                                     => char_exp
-  1:OptionalOp 2:LongVariable                                => op_var_exp
-  1:OptionalOp 2:LongConstructor                             => op_constr_exp
-  left:LBRACE exprows:Exprows right:RBRACE                   => record_exp
-  1:HASH 2:Label                                             => select_exp
-  left:LPAREN exps:Exps right:RPAREN                         => tuple_exp
-  left:LBRACKET exps:ExpsNoEmpty right:RBRACKET              => list_exp
-  left:LBRACKET DOT plugin:LIDENT COLON ty:Ty right:RBRACKET => deriving_exp
-  left:LBRACKET right:RBRACKET                               => nil_exp
-  left:LPAREN expseq:Expseq right:RPAREN                     => seq_exp
-  left:LET dec:DecWithLocal IN exps:ExpsNoEmpty right:END    => let_exp
-
 nonterminal ExpseqPlusSingle : exps =
   1:Exp => sing_exps
   1:Expseq => id_exps
@@ -227,8 +210,7 @@ nonterminal Atexp : exp =
   left:LBRACKET DOT plugin:LIDENT COLON ty:Ty right:RBRACKET   => deriving_exp
   left:LBRACKET right:RBRACKET                                 => nil_exp
   left:LPAREN expseq:Expseq right:RPAREN                       => seq_exp
-  left:LET dec:DecWithLocal IN exps:ExpseqPlusSingle right:END => let_exp
->>>>>>> fa4e9e2 (fixing parsing bugs)
+  left:LET dec:Decs IN exps:ExpseqPlusSingle right:END => let_exp
 
 nonterminal Matchrule : matchrule =
   pat:Pat DARROW exp:Exp  => mk_matchrule precr 0
@@ -489,20 +471,26 @@ nonterminal Dec : dec =
   left:TYPE typbinds:Typbinds                                                      => ty_dec
   left:DATATYPE datbinds:Datbinds withtypee:OptionalWithtype                       => dat_dec
   left:DATATYPE left_tycon:TyIdent EQUAL DATATYPE right_tycon:TyLongid             => datrepl_dec
-  left:ABSTYPE datbinds:Datbinds withtypee:OptionalWithtype WITH dec:DecWithLocal right:END
+  left:ABSTYPE datbinds:Datbinds withtypee:OptionalWithtype WITH dec:Decs right:END
                                                                                    => absty_dec
   left:EXCEPTION exbinds:Exbinds                                                   => ex_dec
   left:OPEN ids:OpenIdents                                                         => open_dec
   left:INFIX precedence:OptionalInt ids:BindableIdents                             => infix_dec
   left:INFIXR precedence:OptionalInt ids:BindableIdents                            => infixr_dec
   left:NONFIX ids:BindableIdents                                                   => nonfix_dec
-nonterminal Decs : dec =
-  1:Dec                          => sing_decs
-  1:Dec OptionalSemicolon 2:Decs => cons_decs
+
 nonterminal DecWithLocal : dec =
-  /* epsilon */                                                        => nil_decs
-  1:Decs                                                               => id_decs
-  left:LOCAL left_dec:DecWithLocal IN right_dec:DecWithLocal right:END => local_dec
+  1:Dec => id_decs
+  left:LOCAL left_dec:Decs IN right_dec:Decs right:END => local_dec
+
+nonterminal DecsNoEmpty : dec =
+  1:DecWithLocal                        => sing_decs
+  1:DecWithLocal OptionalSemicolon 2:DecsNoEmpty => cons_decs
+
+nonterminal Decs : dec =
+  1:DecsNoEmpty               => id_decs
+  /* epsilon */               => nil_decs
+
 
 /********************/
 /* Signature stuff. */
@@ -579,7 +567,8 @@ nonterminal Module : module =
   1:ModLongid                                    => ident_module
   module:Module COLON signat:Signat              => transparent_module
   module:Module SEAL signat:Signat               => opaque_module
-  id:ModIdent LPAREN module:Module RPAREN        => app_module
+  id:ModIdent LPAREN module:Module right:RPAREN  => app_module
+  id:ModIdent LPAREN strdec:Strdec right:RPAREN  => app_module_sugar
   left:LET dec:Strdec IN module:Module right:END => let_module
 
 nonterminal Strbind : strbind =
@@ -610,14 +599,16 @@ nonterminal Sigbinds : sigbinds =
 nonterminal Sigdec : sigdec =
   left:SIGNATURE sigbinds:Sigbinds => mk_sigdec
 
+nonterminal Funarg : funarg =
+  id:ModIdent COLON signat:Signat => normal_funarg
+  1:SpecseqPlusEmpty => sugar_funarg
+
 nonterminal Funbind : funbind =
-  id:ModIdent LPAREN arg_id:ModIdent COLON signat:Signat RPAREN EQUAL body:Module
+  id:ModIdent LPAREN funarg:Funarg RPAREN EQUAL body:Module
                                                     => bare_funbind
-  id:ModIdent LPAREN arg_id:ModIdent SEAL signat:Signat RPAREN
-    COLON signat2:Signat EQUAL body:Module
+  id:ModIdent LPAREN funarg:Funarg RPAREN COLON signat:Signat EQUAL body:Module
                                                     => transparent_funbind
-  id:ModIdent LPAREN arg_id:ModIdent COLON signat:Signat RPAREN
-    SEAL signat2:Signat EQUAL body:Module
+  id:ModIdent LPAREN funarg:Funarg RPAREN SEAL signat:Signat EQUAL body:Module
                                                     => opaque_funbind
 
 /* todo: opaque ascription */

@@ -26,6 +26,7 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
    struct
       open Context
       open Arg
+      open Error
 
       structure Table = SymbolHashTable
 
@@ -71,7 +72,15 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
                     (Left, Left) => false
                   | (Right, Right) => true
                   | _ =>
-                       raise (Error.SyntaxError ("adjacent equal-precedence infix operators have opposite associativity", pos))))
+                      err
+                        ( TransformError
+                            { reason =
+                                "adjacent equal-precedence infix operators have opposite associativity"
+                            , pos = pos
+                            }
+                        )
+                )
+          )
 
 
       (* A well-formed stack is a nonempty list, with alternating Oper and Arg elements,
@@ -114,7 +123,12 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
                               [] => raise (Fail "ill-formed stack")
 
                             | Oper _ :: _ =>
-                                 raise (Error.SyntaxError ("misplaced infix operator", #1 span))
+                                err
+                                  ( TransformError
+                                      { reason = "misplaced infix operator"
+                                      , pos = #1 span
+                                      }
+                                  )
 
                             | Arg _ :: _ =>
                                  let
@@ -152,7 +166,12 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
                 (case resolve table first of
                     (* Can't start with an infix operator *)
                     Oper (_, _, _, span) =>
-                       raise (Error.SyntaxError ("misplaced infix operator", #1 span))
+                      err
+                        ( TransformError
+                            { reason = "misplaced infix operator"
+                            , pos = #1 span
+                            }
+                        )
 
                   | arg as (Arg _) =>
                        let
@@ -160,7 +179,12 @@ functor PrecedenceFun (structure Arg : PRECEDENCE_ARG)
                        in
                           (case stack of
                               Oper _ :: _ =>
-                                 raise (Error.SyntaxError ("missing infix argument", #2 fullspan))
+                                err
+                                  ( TransformError
+                                      { reason = "missing infix argument"
+                                      , pos = #2 fullspan
+                                      }
+                                  )
 
                             | [] =>
                                  raise (Fail "ill-formed stack")
@@ -237,6 +261,7 @@ structure PatPrecedence =
    (structure Arg =
        struct
           open SMLSyntax
+          open Error
 
           type t_ = pat_
           type t = pat
@@ -250,9 +275,13 @@ structure PatPrecedence =
                       , Node.join_span p1 p2)
 
                | _ =>
-                   (raise (Error.SemanticError
-                            ("pattern operator is not a constructor",
-                              Node.getSpan p1))))
+                   err
+                     (TransformError
+                       { reason = "pattern operator is not a constructor"
+                       , pos = #1 (Node.getSpan p1)
+                       }
+                      )
+              )
 
           (*
           fun applyCurriedInfix oper e1 e2 =

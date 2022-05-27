@@ -39,7 +39,7 @@ gonna need one for datatype replication here too
 - [X] add codegen for ord
 - [X] add codegen for map
 
-- Can't do NJ extensions (in particular, functor syntactic sugar).
+- Can't do NJ extensions (in particular, functor syntactic sugar and OR-PATTERNS).
   - Not a big deal, except for the fact that we really should, for best usage
     experience
 - The parser we're using (from mlc) was never intended for altering source text.

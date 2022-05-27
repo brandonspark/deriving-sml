@@ -112,7 +112,14 @@ structure CM_Lexer :> LEXER =
                    )
             )
 
-        fun unfinished _ _ pos = raise SyntaxError ("unfinished", pos)
+        fun unfinished ({follow, ...} : info) _ pos =
+          err
+            ( LexError
+                { reason = "unfinished mode"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
         fun enter_comment ({len, follow, self, ...}: info) (k as LEX cont) pos =
           let
@@ -151,8 +158,13 @@ structure CM_Lexer :> LEXER =
           Cons (EOF (pos, pos), eager Nil)
 
         fun error ({follow, ...}: info) _ pos =
-          (print ((String.implode (Stream.toList follow)) ^ "\n");
-           raise SyntaxError ("illegal lexeme", pos))
+          err
+            ( LexError
+                { reason = "illegal lexeme"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
         (* comment *)
 
@@ -169,13 +181,41 @@ structure CM_Lexer :> LEXER =
         fun comment_skip ({ len, follow, self, ...} : info) pos =
           #comment self follow (pos + len)
 
-        fun unclosed_comment _ pos = raise SyntaxError ("unclosed comment", pos)
+        fun unclosed_comment ({follow, ...}: info) pos =
+          err
+            ( LexError
+                { reason = "unclosed comment"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
-        fun comment_error _ pos = raise SyntaxError ("illegal character", pos)
+        fun comment_error ({follow, ...}: info) pos =
+          err
+            ( LexError
+                { reason = "illegal character in comment"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
-        fun unfinished_if _ pos = raise SyntaxError ("unfinished if", pos)
+        fun unfinished_if ({follow, ...}: info) pos =
+          err
+            ( LexError
+                { reason = "unfinished #if"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
-        fun error_if _ pos = raise SyntaxError ("illegal character", pos)
+        fun error_if ({follow, ...}: info) pos =
+          err
+            ( LexError
+                { reason = "illegal character in #if"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
         (* string *)
 
@@ -220,9 +260,23 @@ structure CM_Lexer :> LEXER =
         fun exit_string ({ len, follow, ... }:info) pos acc =
           (acc, follow, pos+len)
 
-        fun unclosed_string _ pos _ = raise (SyntaxError ("unclosed string", pos))
+        fun unclosed_string ({follow, ...}: info) pos =
+          err
+            ( LexError
+                { reason = "unclosed string"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
-        fun string_error _ pos _ = raise (SyntaxError ("illegal character", pos))
+        fun string_error ({follow, ...}: info) pos =
+          err
+            ( LexError
+                { reason = "illegal character in string"
+                , pos = pos
+                , rest = Stream.toList follow
+                }
+            )
 
       end
 

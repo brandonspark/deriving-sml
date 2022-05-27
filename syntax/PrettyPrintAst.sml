@@ -804,11 +804,14 @@ struct
             [ SOME (show_module module)
             , SOME (case opacity of Transparent => text_syntax ":" | _ => text_syntax ":>")
             , SOME (show_signat signat) ]
-      | Mapp {functorr, module} =>
+      | Mapp {functorr, arg} =>
           group (
             show_id functorr +-+ text_syntax "("
             ++
-            show_module module
+            (case arg of
+              Normal_app module => show_module module
+            | Sugar_app strdec => show_strdec strdec
+            )
             ++
             text_syntax ")"
           )
@@ -996,8 +999,6 @@ struct
     and show_sigdec sigdec = show_sigbinds (Node.getVal sigdec)
   end
 
-
-
   fun show_funbinds binds =
     let
       val color = orange
@@ -1007,15 +1008,21 @@ struct
 
       fun mk mark node =
         let
-          val {id, arg_id, signat, seal, body} = Node.getVal node
+          val {id, funarg, seal, body} = Node.getVal node
         in
           group (
             separateWithSpaces
               [ SOME (if mark then text "functor" else text "and")
               , SOME (show_id id)
-              , SOME (parensAround (
-                  show_id arg_id +-+ text_syntax ":" +-+ show_signat signat)
-                )
+              , SOME
+                  ( parensAround
+                    (case funarg of
+                      Normal {id, signat} =>
+                        show_id id +-+ text_syntax ":" +-+ show_signat signat
+                    | Sugar specs =>
+                        show_list show_spec " " specs
+                    )
+                  )
               , Option.map (fn {signat, opacity} =>
                   case opacity of
                           Transparent => text_syntax ":" +-+ show_signat signat

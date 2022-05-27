@@ -288,7 +288,7 @@ structure PreSMLSyntax =
         }
       | Mapp of {
           functorr : identifier,
-          module : module
+          arg : funarg_app
         }
       | Mlet of {
           dec : strdec,
@@ -343,6 +343,14 @@ structure PreSMLSyntax =
         Transparent
       | Opaque
 
+    and funarg =
+        Normal of {id : identifier, signat : signat}
+      | Sugar of spec list
+
+    and funarg_app =
+        Normal_app of module
+      | Sugar_app of strdec
+
     withtype module = module_ Node.t
     and strdec = strdec_ Node.t
     and signat = signat_ Node.t
@@ -357,8 +365,7 @@ structure PreSMLSyntax =
 
     type funbind = {
         id : identifier,
-        arg_id : identifier,
-        signat : signat,
+        funarg : funarg,
         seal : { signat : signat, opacity : opacity } option,
         body : module
       }
@@ -435,6 +442,7 @@ signature SMLSYNTAX =
     datatype signat_ = datatype PreSMLSyntax.signat_
     datatype spec_ = datatype PreSMLSyntax.spec_
     datatype opacity = datatype PreSMLSyntax.opacity
+    datatype funarg_app = datatype PreSMLSyntax.funarg_app
 
     type module = PreSMLSyntax.module
     type strdec = PreSMLSyntax.strdec
@@ -445,6 +453,8 @@ signature SMLSYNTAX =
     type sigdec = PreSMLSyntax.sigdec
 
     (* FUNCTORS *)
+
+    datatype funarg = datatype PreSMLSyntax.funarg
 
     type funbind = PreSMLSyntax.funbind
     type funbinds = PreSMLSyntax.funbinds
@@ -522,6 +532,7 @@ structure SMLSyntax : SMLSYNTAX =
     datatype signat_ = datatype PreSMLSyntax.signat_
     datatype spec_ = datatype PreSMLSyntax.spec_
     datatype opacity = datatype PreSMLSyntax.opacity
+    datatype funarg_app = datatype PreSMLSyntax.funarg_app
 
     type module = PreSMLSyntax.module
     type strdec = PreSMLSyntax.strdec
@@ -532,6 +543,8 @@ structure SMLSyntax : SMLSYNTAX =
     type sigdec = PreSMLSyntax.sigdec
 
     (* FUNCTORS *)
+
+    datatype funarg = datatype PreSMLSyntax.funarg
 
     type funbind = PreSMLSyntax.funbind
     type funbinds = PreSMLSyntax.funbinds

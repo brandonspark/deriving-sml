@@ -60,5 +60,3 @@ structure Node : NODE =
 
     fun location_insensitive_eq p (left, right) = p (getVal left, getVal right)
   end
-
-
