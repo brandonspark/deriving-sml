@@ -600,7 +600,7 @@ struct
           (case valbinds of
             [] => raise Fail "empty valbinds"
           | hd::tl =>
-              List.foldr op$$<
+              List.foldl op$$<
               (group (
                 separateWithSpaces
                   [ SOME (text "val")
