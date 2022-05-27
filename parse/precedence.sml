@@ -246,7 +246,7 @@ structure ExpPrecedence =
                           *)
                          Node.create_absurd
                           (Eident { opp = false
-                                , id = [Node.map (fn sym => map_sym sym (fn s => "op" ^ s)) oper]
+                                , id = [Node.map (fn sym => map_sym sym (fn s => "op " ^ s)) oper]
                                 }
                           )
                      , right = Node.create (Etuple [e1, e2], new_span) }
@@ -294,7 +294,7 @@ structure PatPrecedence =
                       val new_span = Node.join_span e1 e2
                     in
                       Node.create
-                        ( Papp { id = [Node.map (fn sym => map_sym sym (fn s => "op" ^ s)) oper]
+                        ( Papp { id = [Node.map (fn sym => map_sym sym (fn s => "op " ^ s)) oper]
                                    , atpat = Node.create (Ptuple [e1, e2], new_span) }
                         , new_span)
                     end

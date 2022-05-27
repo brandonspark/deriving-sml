@@ -159,7 +159,9 @@ structure Context :> CONTEXT =
                   (* This wasn't in the Definition, but c.f.
                    * https://home.cse.ust.hk/~dekai/3031/lectures/sml/h.sml.pdf
                    *)
-                  ("^", Left, 6)
+                  ("^", Left, 6),
+                  ("o", Left, 3),
+                  ("@", Right, 5)
                   ]
       val init =
         basis

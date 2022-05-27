@@ -630,7 +630,7 @@ struct
               case clauses of
                 [] => raise Fail "empty clauses in fvalbind"
               | hd::tl =>
-                  List.foldr op$$<
+                  List.foldl op$$<
                     (group (
                       text (if mark then "fun" else "and")
                       +-+

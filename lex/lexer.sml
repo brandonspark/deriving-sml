@@ -314,6 +314,7 @@ structure Lexer :> LEXER =
                 ( List.concatMap
                     (fn #"\"" => [#"\\", #"\""]
                     | #"\n" => [#"\\", #"n"]
+                    | #"\\" => [#"\\", #"\\"]
                     (* TODO: fix other special characters? *)
                     | other => [other]
                     )
