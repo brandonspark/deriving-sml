@@ -106,10 +106,14 @@ nonterminal OptDeriving : optional_deriving =
 /* Identifier stuff. */
 /*********************/
 
-nonterminal BindableIdent : identifier =
+nonterminal BindableIdentNoUpper : identifier =
    1:LIDENT => id_ident
    1:SIDENT => id_ident
    1:TIMES  => times_ident
+
+nonterminal BindableIdent : identifier =
+  1:BindableIdentNoUpper => id_ident
+  1:UIDENT => id_ident
 
 nonterminal BindableIdents : identifiers =
    1:BindableIdent                  => sing_identifiers
@@ -203,6 +207,28 @@ nonterminal Atexp : exp =
   left:LBRACKET right:RBRACKET                               => nil_exp
   left:LPAREN expseq:Expseq right:RPAREN                     => seq_exp
   left:LET dec:DecWithLocal IN exps:ExpsNoEmpty right:END    => let_exp
+
+nonterminal ExpseqPlusSingle : exps =
+  1:Exp => sing_exps
+  1:Expseq => id_exps
+
+nonterminal Atexp : exp =
+  1:NUMBER                                                     => num_exp
+  1:WORD                                                       => word_exp
+  1:REAL                                                       => real_exp
+  1:STRING                                                     => str_exp
+  1:CHAR                                                       => char_exp
+  1:OptionalOp 2:LongVariable                                  => op_var_exp
+  1:OptionalOp 2:LongConstructor                               => op_constr_exp
+  left:LBRACE exprows:Exprows right:RBRACE                     => record_exp
+  1:HASH 2:Label                                               => select_exp
+  left:LPAREN exps:Exps right:RPAREN                           => tuple_exp
+  left:LBRACKET exps:ExpsNoEmpty right:RBRACKET                => list_exp
+  left:LBRACKET DOT plugin:LIDENT COLON ty:Ty right:RBRACKET   => deriving_exp
+  left:LBRACKET right:RBRACKET                                 => nil_exp
+  left:LPAREN expseq:Expseq right:RPAREN                       => seq_exp
+  left:LET dec:DecWithLocal IN exps:ExpseqPlusSingle right:END => let_exp
+>>>>>>> fa4e9e2 (fixing parsing bugs)
 
 nonterminal Matchrule : matchrule =
   pat:Pat DARROW exp:Exp  => mk_matchrule precr 0
@@ -300,6 +326,10 @@ nonterminal PatseqTrue : patseq =
   1:Pat                => sing_patseq
   1:Patseq             => id_patseq
 
+nonterminal OrPat : patseq =
+  1:Pat BAR 2:Pat => pair_patseq
+  1:Pat BAR 2:OrPat => cons_patseq
+
 nonterminal AtpatWithoutIdent : pat =
   1:UNDERSCORE                                    => wild_pat
   1:NUMBER                                        => number_pat
@@ -311,12 +341,14 @@ nonterminal AtpatWithoutIdent : pat =
   1:LongConstructor                               => constr_pat
   opp:OP constr:LongConstructor                   => op_constr_pat
   left:LPAREN    patseq:Patseq     right:RPAREN   => tuple_pat
+  left:LPAREN    orpat:OrPat       right:RPAREN   => or_pat
   LPAREN         1:PatUnchecked    RPAREN         => id_pat
   left:LBRACKET  patseq:PatseqTrue right:RBRACKET => list_pat
 nonterminal Atpat : pat =
-  1:BindableIdent                                 => ident_pat
-  opp:OP id:BindableIdent                         => ident_op_pat
+  1:BindableIdentNoUpper                                 => ident_pat
+  opp:OP id:BindableIdentNoUpper                         => ident_op_pat
   1:AtpatWithoutIdent                             => id_pat
+
 nonterminal Atpats : pats =
   1:Atpat                                        => sing_atpats
   1:Atpat 2:Atpats                               => cons_atpats
@@ -524,6 +556,15 @@ nonterminal SpecseqPlusEmpty : specs =
   /* epsilon */                                                    => empty_specs
   1:Specseq                                                        => id_specs
 
+/* TODO: This is apparently grammatically ambiguous.
+nonterminal Wheretype : wheretype =
+  TYPE tyvars:Tyvarseq id:TyLongid EQUAL ty:TY => mk_wheretype
+
+nonterminal Wheretypes : wheretypes =
+  1:Wheretype => sing_wheretypes
+  1:Wheretype AND 2:Wheretypes => cons_wheretypes
+*/
+
 nonterminal Signat : signat =
   left:SIG specs:SpecseqPlusEmpty right:END                        => spec_signat
   1:ModIdent                                                       => ident_signat
@@ -549,7 +590,6 @@ nonterminal Strbinds : strbinds =
   1:Strbind                                           => sing_strbinds
   1:Strbind AND 2:Strbinds                            => cons_strbinds
 
-
 nonterminal StrdecAtom : strdec =
   left:STRUCTURE strbinds:Strbinds                                => structure_strdec
   left:LOCAL left_dec:Strdec IN right_dec:Strdec right:END        => local_strdec
@@ -572,7 +612,15 @@ nonterminal Sigdec : sigdec =
 
 nonterminal Funbind : funbind =
   id:ModIdent LPAREN arg_id:ModIdent COLON signat:Signat RPAREN EQUAL body:Module
-                                                    => mk_funbind
+                                                    => bare_funbind
+  id:ModIdent LPAREN arg_id:ModIdent SEAL signat:Signat RPAREN
+    COLON signat2:Signat EQUAL body:Module
+                                                    => transparent_funbind
+  id:ModIdent LPAREN arg_id:ModIdent COLON signat:Signat RPAREN
+    SEAL signat2:Signat EQUAL body:Module
+                                                    => opaque_funbind
+
+/* todo: opaque ascription */
 nonterminal Funbinds : funbinds =
   1:Funbind                                         => sing_funbinds
   1:Funbind AND 2:Funbinds                          => cons_funbinds

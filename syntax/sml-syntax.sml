@@ -70,6 +70,7 @@ structure PreSMLSyntax =
       | Punit
       | Ptuple of pat list
       | Plist of pat list
+      | Por of pat list
 
       (* pats *)
       | Papp of {
@@ -358,6 +359,7 @@ structure PreSMLSyntax =
         id : identifier,
         arg_id : identifier,
         signat : signat,
+        seal : { signat : signat, opacity : opacity } option,
         body : module
       }
     type funbinds = funbind Node.t list

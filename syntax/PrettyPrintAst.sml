@@ -301,6 +301,8 @@ struct
           parensAround (show_list_after show_pat ", " pats)
       | Plist pats =>
           text_syntax "[" ++ show_list show_pat ", " pats ++ text_syntax "]"
+      | Por pats =>
+          text_syntax "(" ++ show_list show_pat " | " pats ++ text_syntax ")"
       | Papp {id, atpat} =>
           parensAround (
             show_constr id
@@ -850,7 +852,8 @@ struct
             group (
               separateWithSpaces
                 [ show_tyvars_option tyvars
-                , SOME (show_longid id) ]
+                , SOME (show_longid id)
+                , SOME (text_syntax "=")]
                 $$
                 show_ty ty
             )
@@ -1004,7 +1007,7 @@ struct
 
       fun mk mark node =
         let
-          val {id, arg_id, signat, body} = Node.getVal node
+          val {id, arg_id, signat, seal, body} = Node.getVal node
         in
           group (
             separateWithSpaces
@@ -1013,6 +1016,11 @@ struct
               , SOME (parensAround (
                   show_id arg_id +-+ text_syntax ":" +-+ show_signat signat)
                 )
+              , Option.map (fn {signat, opacity} =>
+                  case opacity of
+                          Transparent => text_syntax ":" +-+ show_signat signat
+                        | Opaque => text_syntax ":>" +-+ show_signat signat)
+                seal
               , SOME (text_syntax "=") ]
             $$
             show_module body

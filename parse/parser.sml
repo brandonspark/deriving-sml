@@ -1,4 +1,3 @@
-
 type result = SMLSyntax.ast * Token.token list
 signature PARSER =
   sig
