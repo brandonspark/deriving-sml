@@ -1,4 +1,13 @@
 Group
+  structure CM_Token
+  structure CM_Parser
+
+  structure Parser
+  structure PrettyPrintAst
+
+  structure Node
+  structure Symbol
+
   structure Top
 is
   $/basis.cm
