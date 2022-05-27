@@ -1,17 +1,16 @@
 
 structure Top =
   struct
-    fun swaperoo ast filename =
+    (* Makes fresh filenames *)
+    fun mk_new_filename filename =
+      if OS.Process.isSuccess (OS.Process.system ("test -f " ^ filename)) then
+        mk_new_filename ("new_" ^ filename)
+      else
+        filename
+
+    (* Swaps the contents of two files *)
+    fun swaperoo ast filename new_filename =
       let
-        (* Get a fresh name *)
-        fun mk_new_filename filename =
-          if OS.Process.isSuccess (OS.Process.system ("test -f " ^ filename)) then
-            mk_new_filename ("new_" ^ filename)
-          else
-            filename
-
-        val new_filename = mk_new_filename filename
-
         (* Copy the original file to the new name *)
         val _ = OS.Process.system ("cp " ^ filename ^ " " ^ new_filename)
 
@@ -20,11 +19,11 @@ structure Top =
         val _ = TextIO.output (outstream, PrettyPrintAst.pretty ast false)
         val _ = TextIO.closeOut outstream
       in
-        new_filename
+        ()
       end
 
-    fun swap_back (original_filename, new_filename) =
-      OS.Process.system ("mv " ^ new_filename original_filename)
+    fun swap_back original_filename new_filename =
+      OS.Process.system ("mv " ^ new_filename ^ " " ^ original_filename)
 
     fun derive_file filename =
       case Parser.parse_file_transformed filename of
@@ -33,7 +32,7 @@ structure Top =
       | Either.INR (ast, _::_) =>
           raise Fail ("there are unparsed tokens:" ^ filename)
       | Either.INR (ast, []) =>
-          (filename, swaperoo ast filename)
+          (filename, ast, mk_new_filename filename)
 
 
     fun collect_paths cur_path filename =
@@ -80,12 +79,15 @@ structure Top =
             let
               val files = List.concatMap collect_paths filenames
 
-              val file_pairs = List.map derive_file files
+              val file_info = List.map derive_file files
             in
-              ( OS.Process.system ("rlwrap sml " ^ String.concatWith " " args)
-              ; List.map (fn (old_name, new_name) =>
-                  OS.Process.system ("mv " ^ new_name ^ " " ^ old_name)
-                ) file_pairs
+              ( List.map
+                  (fn (old_name, ast, new_name) => swaperoo ast old_name new_name)
+                  file_info
+              ; OS.Process.system ("rlwrap sml " ^ String.concatWith " " args)
+              ; List.map (fn (old_name, _, new_name) =>
+                  swap_back old_name new_name
+                ) file_info
               ; OS.Process.exit 0
               )
             end

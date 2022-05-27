@@ -8,11 +8,9 @@ structure Test :
     infix |>
     fun x |> f = f x
 
-    (*
     structure TC = TerminalColors
 
     fun text color s = TC.foreground color ^ s ^ TC.reset
-     *)
 
     val text = Fn.id
 
@@ -32,12 +30,12 @@ structure Test :
       ( List.appi
           (fn (idx, (s, s')) =>
             ( ( if s = s' then (
-                  text (* TC.green *) ("Test " ^ Int.toString idx ^ " passed!\n\n")
+                  text TC.green ("Test " ^ Int.toString idx ^ " passed!\n\n")
                 )
                 else (
-                    text (* TC.red *) ("Test " ^ Int.toString idx ^ " failed!\n")
-                  ^ text (* TC.red *) "Expected: " ^ text (* TC.white *) (toString s') ^ "\n"
-                  ^ text (* TC.red *) "Got: " ^ text (* TC.white *) (toString s) ^ "\n\n"
+                    text TC.red ("Test " ^ Int.toString idx ^ " failed!\n")
+                  ^ text TC.red "Expected: " ^ text TC.white (toString s') ^ "\n"
+                  ^ text TC.red "Got: " ^ text TC.white (toString s) ^ "\n\n"
                 )
               )
               |> print
