@@ -1,4 +1,0 @@
-Group
-  structure CommandLine
-is
-  $/basis.cm

@@ -1,2 +1,0 @@
-Skeleton 5
-d2f±дўSMLSyntax"ad"PrettyPrintAst"jh8езряaдўPD"gp±дўPrettySimpleDoc"egp1я+Cf6дўFn"Cd"Char"дўList"d"ListUtils"дўSymbol"дўNode"Nad"TC"gp1d"TerminalColors"bя%f3яЃяЃяЃ7bя%f4дўInt"дўOption"яЃ.яЃ7f1я‚2Cbя%f6яЃCя‚,я‚2яЃ.яЃ7d"Real"Nbя%f4яЃяЃя‚2яЃ7f2я‚2яЃ7bя%f0fя2Nh0

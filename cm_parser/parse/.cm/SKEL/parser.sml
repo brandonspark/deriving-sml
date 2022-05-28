@@ -1,2 +1,0 @@
-Skeleton 5
-d3f6d"CM_Token"Cd"CM_Lexer"d"Span"ä¢Stream"d"List"d"Symbol"Cd"String"d"Either"d"Node"ä¢StreamStreamable"d"TextIO"Naã¢PARSER"è0ad"CM_Parser"jh4ad"S"gp1ÿ"aä¢Arg"ÿ<aä¢Input"h2ad"Streamable"gp1ÿaÿ‚gp1ÿ‚ad"ParseMain"jgp1ÿ‚#gp1e"ParserFun"gp1ÿ3
