@@ -54,7 +54,7 @@ identically to `sml`.
 Suppose we had the following code:
 
 ```sml
-type 'a t = A | B of 'a [.deriving show, eq, compare, map]
+datatype 'a t = A | B of 'a [.deriving show, eq, compare, map]
 ```
 
 Then this will generate code like:
