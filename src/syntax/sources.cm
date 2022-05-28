@@ -1,0 +1,18 @@
+Group
+  structure Token
+  structure SMLSyntax
+
+  structure ScopeDict
+  structure Context
+
+  structure PrettyPrintAst
+is
+  ../utils/sources.cm
+
+  token.sml
+  sml-syntax.sml
+
+  scoped_dict.sml
+  context.sml
+
+  PrettyPrintAst.sml

@@ -1,0 +1,18 @@
+Group
+  structure Token
+  structure Parser
+  structure PrettyPrintAst
+is
+  ../utils/sources.cm
+
+  ../syntax/sources.cm
+  ../lex/sources.cm
+
+  ../deriving/sources.cm
+
+  precedence.sml
+  transform.sml
+
+  parser.fun
+  parser.sml
+

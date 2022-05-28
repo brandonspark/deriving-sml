@@ -1,0 +1,19 @@
+Group
+  structure Derive
+is
+  ../utils/sources.cm
+
+  ../syntax/sources.cm
+  ../lex/sources.cm
+
+  temp_id.sml
+
+  plugin.sig
+  prelude.sml
+
+  show.sml
+  eq.sml
+  compare.sml
+  map.sml
+
+  derive.sml

@@ -1,0 +1,8 @@
+Group
+  structure Test
+is
+  ../src/utils/sources.cm
+  ../src/top/sources.cm
+
+  test.sml
+

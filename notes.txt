@@ -7,7 +7,7 @@ options ::= { <id> = <id> (, <id> = <id>)* }
 
 plugins ::= <id> [<options>] (, <id> [<options>])*
 
-
+MODIFIED:
 
 exp     ::= ...
           | [ .<id>: <tyident> [<options>]]
@@ -40,6 +40,7 @@ gonna need one for datatype replication here too
 - [X] add codegen for map
 - [X] add parsing support for NJ-extensions (or-patterns, functor sugar)
 - [X] add ability to derive all files in an SML project from CM
+- [X] add error messages
 
 - The parser we're using (from mlc) was never intended for altering source text.
   - This parser was meant to be used for a compiler, meaning that it strips down

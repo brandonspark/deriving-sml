@@ -1,0 +1,90 @@
+sml
+name LexMainFun
+alphabet 256
+
+set whitespace = (or 32 9 13 10)
+
+set letter = (range 'A 'Z 'a 'z)
+set lowercase = (range 'a 'z)
+set digit = (range '0 '9)
+set alphanumeric = (or letter digit '_ '')
+
+set symbol = (or '! '# '$ '% '& '' '* '+ '- '. ': '< '= '> '? '@ '^ '| '~ '` '/)
+
+set printable = (range 32 126)
+set stringelem = (- printable '" '\)
+set hexadecimal = (range '0 '9 'A 'F 'a 'f)
+
+regexp ident = (seq letter (* alphanumeric))
+
+regexp longident = (seq (+ (seq ident '.)) (or ident (+ symbol)))
+regexp tlongident = (seq (+ (seq ident '.)) ident)
+
+function main : t =
+  (+ whitespace) => skip
+
+  longident => main_longid
+  ident => main_ident
+
+  (+ symbol) => main_ident
+  (seq '' ident) => tyvar
+
+  (+ digit) => number
+  (seq '~ (+ digit)) => number
+  (seq "0x" (+ hexadecimal)) => hex_number
+  (seq "~0x" (+ hexadecimal)) => hex_number
+
+  (or
+    (seq (+ digit) '. (+ digit))
+    (seq (+ digit) (or 'e 'E) (+ digit))
+    (seq digit '. (+ digit) (or 'e 'E) (+ digit))
+  ) => reallit
+
+  (seq "0w" (+ digit)) => wordlit
+  (seq "0wx" (+ hexadecimal)) => wordlit
+
+  '( => lparen
+  ') => rparen
+  '[ => lbracket
+  '] => rbracket
+  '{ => lbrace
+  '} => rbrace
+
+  "(*" => enter_comment
+  '" => enter_string
+  (seq '# '") => enter_char
+
+  ', => comma
+  '; => semicolon
+  '_ => underscore
+
+  eos => eof
+  epsilon => error
+
+set comment_normal = (~ '( '*)
+
+function comment : u =
+  "(*" => reenter_comment
+  "*)" => exit_comment
+
+  '( => comment_skip
+  '* => comment_skip
+
+  (+ comment_normal) => comment_skip
+
+  eos => unclosed_comment
+  epsilon => comment_error
+
+function string : v =
+  (+ stringelem) => string_elem
+
+  "\n" => string_newline
+  "\\" => string_backslash
+  (seq '\ '") => string_quote
+  (seq "\x" (= 2 hexadecimal)) => string_hex2
+  (seq '\ (+ whitespace) '\) => string_skip
+
+  '" => exit_string
+
+  eos => unclosed_string
+  epsilon => string_error

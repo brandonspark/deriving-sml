@@ -1,0 +1,24 @@
+Group
+  structure StringRedBlackSet
+
+  structure CM_Token
+  structure CM_Parser
+
+  structure Token
+  structure Parser
+  structure PrettyPrintAst
+
+  structure Node
+  structure Symbol
+  structure Error
+
+  structure Top
+is
+  $/basis.cm
+
+  ../utils/sources.cm
+
+  ../cm_parser/sources.cm
+  ../parse/sources.cm
+  top.sml
+
