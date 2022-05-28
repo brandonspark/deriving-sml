@@ -177,8 +177,6 @@ structure Top :
                 |> (fn (paths, _) => paths)
 
               val file_info = List.mapPartial derive_file files
-
-              val _ = print "asts achieved\n"
             in
               ( List.map
                   (fn (old_name, ast, new_name) => swaperoo ast old_name new_name)
