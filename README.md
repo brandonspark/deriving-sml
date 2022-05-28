@@ -17,7 +17,7 @@ New Jersey compiler.
 After a (data)type declaration or specification, you can write `[.deriving
 <plugins>]` to generate code for the attached type.
 
-```
+```sml
 signature FOO =
   sig
     type t [.deriving show]
@@ -53,12 +53,12 @@ identically to `sml`.
 
 Suppose we had the following code:
 
-```
+```sml
 type 'a t = A | B of 'a [.deriving show, eq, compare, map]
 ```
 
 Then this will generate code like:
-```
+```sml
 val show_t : ('a -> string) -> 'a t -> string
 val eq_t : ('a * 'a -> bool) -> 'a t * 'a t -> bool
 val compare_t : ('a * 'a -> order) -> 'a t * 'a t -> order
