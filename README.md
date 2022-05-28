@@ -81,6 +81,11 @@ within a given SML project. As such, it is fully CM compatible - you can run
 form `[.<plugin>: <type>]`. These will generate code for the corresponding
 types, similar to above.
 
+So a snippet of SML code may look like:
+```sml
+val _ = print ("current val is " ^ [.show: ast] ast ^ "\n")
+```
+
 Notably, these types may contain type variables in them. This will generate a
 function expecting curried arguments for those types. The order of the curried arguments is in sorted order of the involved type variables.
 
